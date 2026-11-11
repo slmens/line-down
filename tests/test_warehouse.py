@@ -187,3 +187,27 @@ class LiftTest(unittest.TestCase):
         two_ev = np.concatenate([base * [2, 1, 1, 1], base * 3])
         self.assertAlmostEqual(de.lift(two_ev, two_base)[0, 0], 0.25)  # (20+30)/(10+30) - 1
         self.assertAlmostEqual(de.lift_window(two_ev, two_base, slice(0, 4))[0], 0.25)
+
+
+try:
+    import sklearn
+except ImportError:
+    sklearn = None
+
+
+@unittest.skipIf(np is None or sklearn is None or duckdb is None, "analysis libraries not installed (use .venv/bin/python)")
+class DelayBaselineTest(unittest.TestCase):
+    def test_code_baselines_use_train_only_and_fall_back(self):
+        sys.path.insert(0, str(ROOT / "models"))
+        import delay_length as dl
+        code = np.array(["A"] * 40 + ["B"] * 5 + ["A", "C"])
+        y = np.array([10.0] * 40 + [100.0] * 5 + [999.0, 999.0])
+        train = np.array([True] * 45 + [False, False])  # the 999s are test rows and must not leak
+        med, share, med_all = dl.code_baselines(code, y, train)
+        self.assertEqual(med_all, 10.0)
+        self.assertEqual(med[0], 10.0)        # A: own median
+        self.assertEqual(med[40], 10.0)       # B: only 5 rows -> overall median
+        self.assertEqual(med[46], 10.0)       # C: unseen in train -> overall median
+        big_all = 5 / 45
+        self.assertAlmostEqual(share[40], (5 + 10 * big_all) / (5 + 10))  # smoothed toward overall
+        self.assertAlmostEqual(share[46], big_all)

@@ -1,0 +1,28 @@
+{
+ "train_rows": 73171,
+ "test_rows": 16548,
+ "test_years": "2025-2026",
+ "length_mae_minutes": {
+  "model": 3.882,
+  "baseline_median_per_cause_code": 4.005,
+  "baseline_overall_median": 4.24,
+  "model_better_than_code_baseline_by": 0.123,
+  "improvement_95_range": [
+   0.106,
+   0.138
+  ]
+ },
+ "big_delay_20min": {
+  "test_share": 0.0472,
+  "auc_model": 0.824,
+  "auc_code_baseline": 0.8213,
+  "brier_model": 0.03999,
+  "brier_code_baseline": 0.03996,
+  "brier_improvement_95_range": [
+   -0.0,
+   0.0
+  ],
+  "big_delays_caught_in_top_5pct_model": 0.2919,
+  "big_delays_caught_in_top_5pct_baseline": 0.3022
+ }
+}
