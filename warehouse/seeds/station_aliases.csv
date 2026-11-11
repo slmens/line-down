@@ -1,0 +1,15 @@
+key,station,why
+BLOOR,Bloor-Yonge Station,Line 1 side of the interchange
+YONGE,Bloor-Yonge Station,Line 2 side of the interchange
+YONGE BLOOR,Bloor-Yonge Station,word order
+YONGE AND BLOOR,Bloor-Yonge Station,word order
+SHEPPARD,Sheppard-Yonge Station,"named Sheppard before 2007; plain prefix is ambiguous with Sheppard West"
+SHEPPARD YONGE,Sheppard-Yonge Station,exact after key cleaning
+DUNDAS,TMU Station,renamed 2024
+EGLINTON WEST,Cedarvale Station,renamed 2024
+DOWNSVIEW,Sheppard West Station,renamed 2017
+VMC,Vaughan Metropolitan Centre Station,abbreviation
+NORTH YORK CTR,North York Centre Station,abbreviation
+VAUGHAN MC,Vaughan Metropolitan Centre Station,abbreviation
+YONGE SHEPPARD,Sheppard-Yonge Station,word order
+YONGE AND SHEPPARD,Sheppard-Yonge Station,word order

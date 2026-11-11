@@ -33,7 +33,8 @@ Watches Toronto's transport network and measures what happens when part of it fa
 
 ## Commands
 
-- Test: `python3 -m unittest`
+- Test: `.venv/bin/python -m unittest` (all); `python3 -m unittest` runs collector tests only, warehouse tests skip without DuckDB
+- Build the warehouse: `.venv/bin/python warehouse/build.py` (about 70 s, uses all cores; `--twice` also checks the rebuild is identical). Output `data/warehouse/linedown.duckdb`
 - One bike share snapshot: `python3 collectors/bikeshare.py station_status`
 - One TTC alerts snapshot: `python3 collectors/ttc.py`
 - Check for stopped collectors: `python3 collectors/check_fresh.py`
@@ -53,6 +54,10 @@ Add one line per decision that code alone would not explain, with the date.
 - 2026-11-10: All downloads go through `collectors/common.py`: HTTPS only, certificates verified, no redirects to another host, 10 MB cap, shape checked before saving. Downloads are never executed.
 - 2026-11-10: Each feed folder has a `LAST` file touched on every successful run; `check_fresh.py` (every 5 min) sends a macOS notification when one is too old.
 - 2026-11-10: History comes from Toronto Open Data (CKAN) datasets `ttc-subway-delay-data`, `bike-share-toronto-ridership-data` and `ttc-routes-and-schedules` (GTFS, for subway station locations), saved untouched under `data/raw/history/<dataset>/<last-modified date>/`. Only CSV/XLSX/ZIP are kept (XML/JSON are copies). Each file is checked against the server Content-Length (the portal listing sizes are stale for some files) and zip CRCs verified; nothing is unzipped on disk.
+- 2026-11-10: Warehouse = one DuckDB file rebuilt from scratch by `warehouse/build.py`: zips unpacked to a scratch dir as UTF-8, all-text staging, then `warehouse/sql/*.sql` in order. File quirks are in `warehouse/SOURCES.md`.
+- 2026-11-10: All warehouse times are Toronto local time (history is published that way; live UTC is converted).
+- 2026-11-10: Delay station text is matched to GTFS stations by key cleaning + `warehouse/seeds/station_aliases.csv` + unique prefix; line names, `X TO Y` segments and Scarborough RT stations stay unmatched (~9% of rows). Bloor and Yonge are merged into Bloor-Yonge.
+- 2026-11-10: 2016 and 2017 Q3-Q4 trips have no station ids; ids are filled from names learned in other years (2025 end names excluded: they copy the start name).
 
 ## Agent config
 
