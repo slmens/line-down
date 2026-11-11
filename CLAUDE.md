@@ -34,6 +34,8 @@ Watches Toronto's transport network and measures what happens when part of it fa
 
 - Test: `python3 -m unittest`
 - One bike share snapshot: `python3 collectors/bikeshare.py station_status`
+- One TTC alerts snapshot: `python3 collectors/ttc.py`
+- Check for stopped collectors: `python3 collectors/check_fresh.py`
 - Start collectors on this Mac: `sh collectors/install_launchd.sh` (logs in `data/logs/`)
 
 ## Decisions
@@ -43,6 +45,9 @@ Add one line per decision that code alone would not explain, with the date.
 - 2026-11-10: Live bike share collector built first: dock levels have no public history, so every day not collected is lost.
 - 2026-11-10: Raw snapshots stored gzipped as `data/raw/bikeshare/<feed>/<UTC date>/<last_updated>.json.gz`; UTC so DST never splits or merges hours.
 - 2026-11-10: Collector is one fetch per run, scheduled by launchd (status 30s, station info hourly); the next run is the retry.
+- 2026-11-10: TTC alerts from `alerts.ttc.ca/api/alerts/live-alerts`, stored only when the body's SHA-256 changes. Its `lastUpdated` is Toronto local time mislabelled `Z`; files are named by our fetch time instead.
+- 2026-11-10: All downloads go through `collectors/common.py`: HTTPS only, certificates verified, no redirects to another host, 10 MB cap, shape checked before saving. Downloads are never executed.
+- 2026-11-10: Each feed folder has a `LAST` file touched on every successful run; `check_fresh.py` (every 5 min) sends a macOS notification when one is too old.
 
 ## Agent config
 
