@@ -15,20 +15,51 @@ RAW = Path(__file__).resolve().parent.parent / "data" / "raw"
 MAX_BYTES = 10_000_000  # largest feed is ~0.6 MB; anything far bigger is not the feed
 
 
-def fetch(url):
-    """GET url over verified HTTPS and return the body. Raises on anything unexpected."""
+def _open(url, timeout):
+    """Open url over verified HTTPS, refusing redirects to another host."""
     host = urlparse(url).netloc
     if not url.startswith("https://"):
         raise ValueError(f"refusing non-HTTPS url {url}")
     req = urllib.request.Request(url, headers={"User-Agent": "line-down-collector"})
-    with urllib.request.urlopen(req, timeout=20) as resp:  # verifies certificates by default
-        final = urlparse(resp.geturl())
-        if final.scheme != "https" or final.netloc != host:
-            raise ValueError(f"redirected away from {host} to {resp.geturl()}")
+    resp = urllib.request.urlopen(req, timeout=timeout)  # verifies certificates by default
+    final = urlparse(resp.geturl())
+    if final.scheme != "https" or final.netloc != host:
+        resp.close()
+        raise ValueError(f"redirected away from {host} to {resp.geturl()}")
+    return resp
+
+
+def fetch(url):
+    """GET url and return the body. Raises on anything unexpected."""
+    with _open(url, timeout=20) as resp:
         body = resp.read(MAX_BYTES + 1)
     if len(body) > MAX_BYTES:
         raise ValueError(f"response over {MAX_BYTES} bytes")
     return body
+
+
+def download(url, dest, max_bytes, check):
+    """Stream url to dest. check(path) runs on the finished file before it is kept;
+    on any failure the partial file is deleted. Returns bytes written."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    part = dest.with_name(dest.name + ".part")
+    written = 0
+    try:
+        with _open(url, timeout=60) as resp, open(part, "wb") as f:
+            announced = resp.headers.get("Content-Length")
+            for chunk in iter(lambda: resp.read(1 << 20), b""):
+                written += len(chunk)
+                if written > max_bytes:
+                    raise ValueError(f"download over {max_bytes} bytes")
+                f.write(chunk)
+        if announced is not None and written != int(announced):
+            raise ValueError(f"got {written} bytes, server announced {announced}: cut off")
+        check(part)
+        os.replace(part, dest)
+    except BaseException:
+        part.unlink(missing_ok=True)
+        raise
+    return written
 
 
 def _write_atomic(path, data):

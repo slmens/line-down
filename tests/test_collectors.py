@@ -25,6 +25,9 @@ class FakeResponse:
     def geturl(self):
         return self.url
 
+    def close(self):
+        pass
+
     def read(self, n):
         return self.body[:n]
 

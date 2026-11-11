@@ -36,6 +36,7 @@ Watches Toronto's transport network and measures what happens when part of it fa
 - One bike share snapshot: `python3 collectors/bikeshare.py station_status`
 - One TTC alerts snapshot: `python3 collectors/ttc.py`
 - Check for stopped collectors: `python3 collectors/check_fresh.py`
+- Download or refresh history: `python3 pipelines/download_history.py` (re-runnable; skips what it has)
 - Start collectors on this Mac: `sh collectors/install_launchd.sh` (logs in `data/logs/`)
 
 ## Decisions
@@ -48,6 +49,7 @@ Add one line per decision that code alone would not explain, with the date.
 - 2026-11-10: TTC alerts from `alerts.ttc.ca/api/alerts/live-alerts`, stored only when the body's SHA-256 changes. Its `lastUpdated` is Toronto local time mislabelled `Z`; files are named by our fetch time instead.
 - 2026-11-10: All downloads go through `collectors/common.py`: HTTPS only, certificates verified, no redirects to another host, 10 MB cap, shape checked before saving. Downloads are never executed.
 - 2026-11-10: Each feed folder has a `LAST` file touched on every successful run; `check_fresh.py` (every 5 min) sends a macOS notification when one is too old.
+- 2026-11-10: History comes from Toronto Open Data (CKAN) datasets `ttc-subway-delay-data` and `bike-share-toronto-ridership-data`, saved untouched under `data/raw/history/<dataset>/<last-modified date>/`. Only CSV/XLSX/ZIP are kept (XML/JSON are copies). Each file is checked against the server Content-Length (the portal listing sizes are stale for some files) and zip CRCs verified; nothing is unzipped on disk.
 
 ## Agent config
 
