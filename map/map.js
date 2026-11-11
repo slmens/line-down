@@ -70,7 +70,7 @@ function draw() {
     const blink = slot >= 4 && Math.floor(Date.now() / 400) % 2;
     for (const [id, i] of near) dot(DATA.bikes[id].xy, bikeColor(ev.actual[i][slot], ev.normal[i][slot]));
     // 1 km ring around each stopped station
-    mx.strokeStyle = "rgba(255,59,48,0.35)"; mx.lineWidth = Math.max(1, scale / 3); mx.setLineDash([scale, scale]);
+    mx.strokeStyle = "rgba(255,59,48,0.7)"; mx.lineWidth = Math.max(1, Math.round(scale / 2)); mx.setLineDash([scale, scale]);
     for (const s of ev.affected) { const [px, py] = P(stationXY[s]); mx.beginPath(); mx.arc(px + scale / 2, py + scale / 2, 10 * scale, 0, 7); mx.stroke(); }
     mx.setLineDash([]);
   }
@@ -78,7 +78,9 @@ function draw() {
   if (ev) for (const s of ev.affected) dot(stationXY[s], slot >= 4 && Math.floor(Date.now() / 400) % 2 ? "#7a1a14" : C.red, 2);
 
   // labels: affected stations first, then as many others as fit without overlapping; a few anchors citywide
-  const labels = ev ? [...ev.affected, ...DATA.stations.map(s => s.name).filter(n => !ev.affected.includes(n))] : ["Union Station", "Bloor-Yonge Station", "Finch Station", "Kipling Station", "Kennedy Station", "Vaughan Metropolitan Centre Station", "Don Mills Station"];
+  // (inside the 1 km ring only the stopped station is labelled, so labels never hide bike stations)
+  const outside = n => ev.affected.every(a => Math.hypot(stationXY[n][0] - stationXY[a][0], stationXY[n][1] - stationXY[a][1]) > 12);
+  const labels = ev ? [...ev.affected, ...DATA.stations.map(s => s.name).filter(outside)] : ["Union Station", "Bloor-Yonge Station", "Finch Station", "Kipling Station", "Kennedy Station", "Vaughan Metropolitan Centre Station", "Don Mills Station"];
   mx.font = `${Math.max(11, Math.min(16, Math.round(scale * 2)))}px ui-monospace, Menlo, monospace`;
   mx.textBaseline = "middle";
   const placed = [];
@@ -133,7 +135,7 @@ function describe() {
   const where = ev.to ? `between ${short(ev.from)} and ${short(ev.to)}` : `at ${short(ev.from)}`;
   document.getElementById("caption").textContent =
     `${fmtDay(ev.when)}, ${clock(ev.when, 0)}. Line ${ev.line} was stopped ${where}, logged as a ${ev.min_delay}-minute delay` +
-    `${ev.cause ? ` (${ev.cause.toLowerCase()})` : ""}. In the hour after, ${first} Bike Share trips started within 1 km: ` +
+    `${ev.cause ? ` (${ev.cause.toLowerCase().replace(/\bttc\b/g, "TTC")})` : ""}. In the hour after, ${first} Bike Share trips started within 1 km: ` +
     `${verdict} a normal ${fmtDay(ev.when).split(",")[0]} at that time (${normal.toFixed(0)} on average over ${ev.normal_days} normal days).`;
   const m = SLOTS[slot], a = ev.total_actual[slot], n = ev.total_normal[slot];
   document.getElementById("clock").textContent = clock(ev.slot0, m);
