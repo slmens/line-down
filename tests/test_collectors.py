@@ -85,5 +85,28 @@ class FreshTest(unittest.TestCase):
         self.assertEqual(found, {"bikeshare/station_information": None, "ttc/live_alerts": 3600})
 
 
+class HeartbeatTest(unittest.TestCase):
+    def test_pings_configured_url_and_never_raises(self):
+        with tempfile.TemporaryDirectory() as d:
+            url_file = Path(d) / "heartbeat_url"
+            with mock.patch("check_fresh.fetch") as f:
+                check_fresh.heartbeat(url_file)          # not configured: no ping
+                f.assert_not_called()
+                url_file.write_text("https://hc-ping.com/abc\n")
+                check_fresh.heartbeat(url_file)
+                f.assert_called_once_with("https://hc-ping.com/abc")
+                f.side_effect = OSError("offline")
+                check_fresh.heartbeat(url_file)          # failure is logged, not raised
+
+    def test_no_heartbeat_while_a_feed_is_stale(self):
+        with mock.patch("check_fresh.stale", return_value=[("ttc/live_alerts", 900)]), \
+             mock.patch("check_fresh.subprocess.run"), mock.patch("check_fresh.heartbeat") as hb:
+            check_fresh.main()
+            hb.assert_not_called()
+        with mock.patch("check_fresh.stale", return_value=[]), mock.patch("check_fresh.heartbeat") as hb:
+            check_fresh.main()
+            hb.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()

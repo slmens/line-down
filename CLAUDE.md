@@ -40,7 +40,7 @@ Watches Toronto's transport network and measures what happens when part of it fa
 - Build the warehouse: `.venv/bin/python warehouse/build.py` (about 70 s, uses all cores; `--twice` also checks the rebuild is identical). Output `data/warehouse/linedown.duckdb`
 - One bike share snapshot: `python3 collectors/bikeshare.py station_status`
 - One TTC alerts snapshot: `python3 collectors/ttc.py`
-- Check for stopped collectors: `python3 collectors/check_fresh.py`
+- Check for stopped collectors: `python3 collectors/check_fresh.py` (also pings the URL in `data/heartbeat_url`, if present, when all feeds are fresh)
 - Download or refresh history: `python3 pipelines/download_history.py` (re-runnable; skips what it has; launchd runs it weekly)
 - Create warehouse venv: `~/.local/bin/uv python install 3.12 && { [ -d .venv ] || ~/.local/bin/uv venv --python 3.12 .venv; } && ~/.local/bin/uv pip install --python .venv/bin/python -r requirements.txt`
 - Run warehouse code: `.venv/bin/python <script>`

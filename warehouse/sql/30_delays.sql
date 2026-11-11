@@ -6,7 +6,13 @@
 -- Inputs: stg_delays, stg_delay_codes, seed_station_aliases, subway_stations, line_stations.
 
 create table delay_codes as
-select distinct upper(trim("CODE")) as code, trim("DESCRIPTION") as description
+-- The city's file is UTF-8 encoded twice: an en dash arrives as the three characters
+-- U+00E2 U+0080 U+0093. These are the only such sequences in it (checked 2026-11-11).
+select distinct upper(trim("CODE")) as code,
+    replace(replace(replace(trim("DESCRIPTION"),
+        chr(226) || chr(128) || chr(147), '–'),
+        chr(226) || chr(128) || chr(156), '“'),
+        chr(226) || chr(128) || chr(157), '”') as description
 from stg_delay_codes
 where nullif(trim("CODE"), '') is not null
 order by code;
