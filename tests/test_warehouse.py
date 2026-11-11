@@ -162,3 +162,28 @@ class BuildHelpersTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+try:
+    import numpy as np
+except ImportError:
+    np = None
+
+
+@unittest.skipIf(np is None or duckdb is None, "numpy/duckdb not installed (use .venv/bin/python)")
+class LiftTest(unittest.TestCase):
+    def test_lift_divides_out_the_citywide_change(self):
+        sys.path.insert(0, str(ROOT / "analysis"))
+        import disruption_effect as de
+        K = len(de.K)
+        # one event: near rings x1.2, x1.1, x1.0 of baseline; far x1.0 -> +20%, +10%, 0%
+        base = np.ones((1, K, 4)) * [10, 20, 40, 1000]
+        ev = base * [1.2, 1.1, 1.0, 1.0]
+        np.testing.assert_allclose(de.lift(ev, base)[:, 0], [0.2, 0.1, 0.0])
+        # a citywide +10% (far ring too) is divided out: near x1.32 -> +20%
+        np.testing.assert_allclose(de.lift(base * [1.32, 1.1, 1.1, 1.1], base)[:, 0], [0.2, 0.0, 0.0], atol=1e-12)
+        # events are pooled by summing counts, so a big event outweighs a small one
+        two_base = np.concatenate([base, base * 3])
+        two_ev = np.concatenate([base * [2, 1, 1, 1], base * 3])
+        self.assertAlmostEqual(de.lift(two_ev, two_base)[0, 0], 0.25)  # (20+30)/(10+30) - 1
+        self.assertAlmostEqual(de.lift_window(two_ev, two_base, slice(0, 4))[0], 0.25)
