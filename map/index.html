@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Line Down map</title>
+<style>
+  :root { --bg: #101218; --panel: #181b23; --text: #e8e6df; --dim: #8b8f9a; --hot: #ffd23f; --cold: #4a7bd0; --red: #ff3b30; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 ui-monospace, Menlo, Consolas, monospace; }
+  main { max-width: 1280px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) 380px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h1 + p { margin: 0 0 12px; color: var(--dim); }
+  canvas { display: block; width: 100%; image-rendering: pixelated; background: var(--bg); }
+  #map { border: 2px solid #2a2f3a; }
+  aside { display: flex; flex-direction: column; gap: 12px; }
+  .events { display: grid; gap: 6px; }
+  .events button { text-align: left; font: inherit; font-size: 13px; color: var(--text); background: var(--panel); border: 2px solid #2a2f3a; padding: 6px 8px; cursor: pointer; }
+  .events button[aria-pressed="true"] { border-color: var(--red); }
+  .events button:focus-visible, .controls *:focus-visible { outline: 2px solid var(--hot); outline-offset: 2px; }
+  .badge { display: inline-block; width: 1.4em; text-align: center; color: #000; font-weight: bold; margin-right: 6px; }
+  .controls { display: flex; gap: 8px; align-items: center; }
+  .controls button { font: inherit; background: var(--panel); color: var(--text); border: 2px solid #2a2f3a; padding: 4px 10px; cursor: pointer; }
+  .controls input { flex: 1; accent-color: var(--hot); }
+  #clock { font-size: 18px; }
+  #caption, #now { margin: 0; }
+  #now { min-height: 2.9em; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--dim); }
+  .sw { display: inline-block; width: 10px; height: 10px; margin-right: 5px; vertical-align: -1px; }
+  .note { font-size: 13px; color: var(--dim); margin: 0; }
+</style>
+</head>
+<body>
+<main>
+  <section>
+    <h1>Line Down: when the subway stops, does Toronto grab a bike?</h1>
+    <p>Real TTC delays, replayed. Bike Share stations near the stop light up when more trips start there than on a normal day.</p>
+    <canvas id="map" role="img" aria-label="Pixel map of Toronto's subway and Bike Share stations"></canvas>
+    <div class="legend" style="margin-top:8px">
+      <span><span class="sw" style="background:var(--red)"></span>stopped station</span>
+      <span><span class="sw" style="background:var(--hot)"></span>more bike trips than normal</span>
+      <span><span class="sw" style="background:#d0d4dc"></span>about normal</span>
+      <span><span class="sw" style="background:var(--cold)"></span>fewer than normal</span>
+      <span><span class="sw" style="background:#5a6070"></span>no trips either day</span>
+    </div>
+  </section>
+  <aside>
+    <div class="events" id="events" aria-label="Pick a disruption"></div>
+    <p id="caption" aria-live="polite"></p>
+    <div class="controls">
+      <button id="play" aria-label="Play">▶</button>
+      <input id="slider" type="range" min="0" max="15" value="0" aria-label="Time">
+      <span id="clock"></span>
+    </div>
+    <p id="now" aria-live="polite"></p>
+    <canvas id="chart" width="360" height="170" role="img" aria-label="Bike trips per 15 minutes within 1 km: that day versus normal days"></canvas>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--hot)"></span>trips that day</span>
+      <span><span class="sw" style="background:#fff;height:3px;vertical-align:3px"></span>normal day (average)</span>
+      <span><span class="sw" style="background:#3c4252"></span>range of normal days</span>
+    </div>
+    <p class="note">Normal day = the same weekday and time, 1-4 weeks before and after, with no subway delay on that line. One disruption is noisy: weather and events move these numbers too. Averaged over 3,777 delays of 10+ minutes, trips within 250 m rise 13.6% in the first hour (95% range 9.9% to 17.3%), which is less than one extra trip per delay. Data: TTC delay log, Bike Share Toronto trips, TTC GTFS.</p>
+  </aside>
+</main>
+<script src="data.js"></script>
+<script src="map.js"></script>
+</body>
+</html>
