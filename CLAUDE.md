@@ -36,7 +36,7 @@ Watches Toronto's transport network and measures what happens when part of it fa
 - One bike share snapshot: `python3 collectors/bikeshare.py station_status`
 - One TTC alerts snapshot: `python3 collectors/ttc.py`
 - Check for stopped collectors: `python3 collectors/check_fresh.py`
-- Download or refresh history: `python3 pipelines/download_history.py` (re-runnable; skips what it has)
+- Download or refresh history: `python3 pipelines/download_history.py` (re-runnable; skips what it has; launchd runs it weekly)
 - Start collectors on this Mac: `sh collectors/install_launchd.sh` (logs in `data/logs/`)
 
 ## Decisions

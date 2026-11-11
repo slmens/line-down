@@ -1,5 +1,5 @@
 #!/bin/sh
-# Install (or reinstall) the launchd jobs that run the collectors on this Mac.
+# Install (or reinstall) the launchd jobs that run the collectors and history download on this Mac.
 # launchd starts them at login, after a reboot, and never runs two copies at once.
 # Uninstall: launchctl bootout gui/$(id -u)/com.linedown.<name>; rm ~/Library/LaunchAgents/com.linedown.*.plist
 set -eu
@@ -8,7 +8,7 @@ LOGS="$REPO/data/logs"
 AGENTS="$HOME/Library/LaunchAgents"
 mkdir -p "$LOGS" "$AGENTS"
 
-install_job() { # name interval_seconds script [arg]
+install_job() { # name interval_seconds script_path [arg]
   label="com.linedown.$1"
   plist="$AGENTS/$label.plist"
   arg=""
@@ -22,7 +22,7 @@ install_job() { # name interval_seconds script [arg]
   <key>ProgramArguments</key>
   <array>
     <string>/usr/bin/python3</string>
-    <string>$REPO/collectors/$3</string>
+    <string>$REPO/$3</string>
     $arg
   </array>
   <key>WorkingDirectory</key><string>$REPO</string>
@@ -39,7 +39,8 @@ EOF
   echo "installed $label: $3 ${4:-} every $2s, log $LOGS/$1.log"
 }
 
-install_job bikeshare-status 30 bikeshare.py station_status
-install_job bikeshare-info 3600 bikeshare.py station_information  # station locations change rarely
-install_job ttc-alerts 30 ttc.py
-install_job check-fresh 300 check_fresh.py
+install_job bikeshare-status 30 collectors/bikeshare.py station_status
+install_job bikeshare-info 3600 collectors/bikeshare.py station_information  # station locations change rarely
+install_job ttc-alerts 30 collectors/ttc.py
+install_job check-fresh 300 collectors/check_fresh.py
+install_job download-history 604800 pipelines/download_history.py  # weekly; city publishes monthly
