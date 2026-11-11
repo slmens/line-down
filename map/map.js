@@ -1,16 +1,34 @@
-// Line Down map. Draws DATA (from data.js, written by export.py) on a canvas; map units are 100 m.
+// Line Down pixel map. Draws DATA (from data.js, written by export.py); map units are 100 m.
+// The scene is drawn small (1 art pixel = 2 device pixels) one colour at a time, each colour's edge
+// pixels snapped fully on or off (no blur, no blended colours), then scaled up by a whole number
+// at devicePixelRatio. Labels are crisp text on top.
 const [W, H] = DATA.size;
 const SLOTS = DATA.slot_minutes, K0 = SLOTS.indexOf(0);
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const RAMP = ["--o0", "--o1", "--o2", "--o3"].map(css), RED = css("--red");
-const LAKE = "#d7e6f0", INK = "#1d1d1f";
+const LAKE = "#d7e6f0", INK = "#1d1d1f", BG = "#fbfaf7", RING = "#e58b84", HALO = "#f6d5d1", FAINT = "#dcd9d2";
+let ART = 2;   // css pixels per art pixel; set in draw() so one art pixel is always 2 device pixels
+const art = document.createElement("canvas"), g = art.getContext("2d");
+const scratch = document.createElement("canvas"), sg = scratch.getContext("2d", { willReadFrequently: true });
+
+// paint(ctx) draws shapes in css pixels with whatever fill/stroke it uses; they land on the art canvas in one colour
+function layer(color, paint) {
+  scratch.width = art.width; scratch.height = art.height;
+  sg.setTransform(1 / ART, 0, 0, 1 / ART, 0, 0);
+  sg.fillStyle = sg.strokeStyle = color; sg.lineJoin = sg.lineCap = "round";
+  paint(sg);
+  const d = sg.getImageData(0, 0, scratch.width, scratch.height), a = d.data;
+  for (let i = 3; i < a.length; i += 4) a[i] = a[i] >= 110 ? 255 : 0;
+  sg.putImageData(d, 0, 0);
+  g.drawImage(scratch, 0, 0);
+}
 
 const map = document.getElementById("map"), mx = map.getContext("2d");
 const chart = document.getElementById("chart"), cx = chart.getContext("2d");
 const slider = document.getElementById("slider"), playBtn = document.getElementById("play"), tip = document.getElementById("tip");
 const stationXY = Object.fromEntries(DATA.stations.map(s => [s.name, s.xy]));
 const terminals = new Set(Object.values(DATA.lines).flatMap(l => l.ends));
-let ev = null, slot = 0, timer = null, view = null, k = 1, hover = null;
+let ev = null, slot = 0, timer = null, view = null, k = 1;
 
 const short = s => s.replace(/ Station$/, "");
 const sum = a => a.reduce((x, y) => x + y, 0);
@@ -20,7 +38,6 @@ function clock(iso, plus) {
   const [h, m] = iso.slice(11, 16).split(":").map(Number), t = h * 60 + m + plus, hh = Math.floor(t / 60) % 24;
   return `${(hh + 11) % 12 + 1}:${String(t % 60).padStart(2, "0")} ${hh < 12 ? "am" : "pm"}`;
 }
-const extraColor = (a, n) => RAMP[Math.max(0, Math.min(3, Math.round(a - n)))];
 
 // canvas sized in CSS pixels, drawn at devicePixelRatio so everything stays sharp
 function fit(canvas, ctx, cssH) {
@@ -32,16 +49,17 @@ function fit(canvas, ctx, cssH) {
 const P = ([x, y]) => [(x - view.x) * k, (y - view.y) * k];
 
 function path(ctx, pts, T) { ctx.beginPath(); pts.forEach((p, i) => { const [x, y] = T(p); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); }
-function lake(ctx, T) {   // shoreline, closed off far to the south
+function lake(T) {   // shoreline, closed off far to the south
   const s = DATA.shore, pts = [[-50, s[0][1]], ...s, [W + 50, s[s.length - 1][1]], [W + 50, H + 200], [-50, H + 200]];
-  path(ctx, pts, T); ctx.closePath(); ctx.fillStyle = LAKE; ctx.fill();
+  return ctx => { path(ctx, pts, T); ctx.closePath(); ctx.fill(); };
 }
-function lines(ctx, T, width) {
+function lines(T, width, clip) {
   for (const id of ["2", "4", "1"]) {
-    const l = DATA.lines[id]; if (!l) continue;
-    path(ctx, l.points, T); ctx.strokeStyle = l.color; ctx.lineWidth = width; ctx.lineJoin = ctx.lineCap = "round"; ctx.stroke();
+    const l = DATA.lines[id];
+    if (l) layer(l.color, ctx => { clip?.(ctx); path(ctx, l.points, T); ctx.lineWidth = width; ctx.stroke(); });
   }
 }
+const dots = (list, r) => ctx => { for (const [x, y] of list) { ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); } };
 function label(text, [x, y], { bold = false, color = INK } = {}) {
   mx.font = `${bold ? 600 : 500} 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif`;
   mx.lineWidth = 4; mx.strokeStyle = "rgba(251,250,247,.95)"; mx.lineJoin = "round";
@@ -54,56 +72,52 @@ function draw() {
   // view: about 6 km across (4 km on a phone), centred on the stopped station(s), same aspect as the canvas
   const pts = ev.affected.map(s => stationXY[s]);
   const c = [sum(pts.map(p => p[0])) / pts.length, sum(pts.map(p => p[1])) / pts.length];
-  const vw = Math.max(60, Math.max(...pts.map(p => p[0])) - Math.min(...pts.map(p => p[0])) + 35) * (w < 500 ? 0.55 : 1);
+  const vw = Math.max(60, Math.max(...pts.map(p => p[0])) - Math.min(...pts.map(p => p[0])) + 35) * (w < 500 ? 0.7 : 1);
+  ART = 2 / (devicePixelRatio || 1);
   k = w / vw; view = { x: c[0] - vw / 2, y: c[1] - h / k / 2, w: vw, h: h / k };
 
-  mx.clearRect(0, 0, w, h);
-  lake(mx, P);
-  // other Bike Share stations: faint context
+  art.width = Math.ceil(w / ART); art.height = Math.ceil(h / ART);
+  g.fillStyle = BG; g.fillRect(0, 0, art.width, art.height);
+  layer(LAKE, lake(P));
   const near = new Map(ev.stations.map((id, i) => [String(id), i]));
-  mx.fillStyle = "#dcd9d2";
-  for (const [id, b] of Object.entries(DATA.bikes)) if (!near.has(id)) { const [x, y] = P(b.xy); mx.fillRect(x - 1, y - 1, 2, 2); }
-  lines(mx, P, 5);
-  // 1 km ring
-  const after = slot >= K0;
-  for (const s of ev.affected) {
-    const [x, y] = P(stationXY[s]);
-    mx.beginPath(); mx.arc(x, y, 10 * k, 0, 7); mx.setLineDash([4, 4]); mx.lineWidth = 1.2; mx.strokeStyle = "rgba(214,45,32,.55)"; mx.stroke(); mx.setLineDash([]);
-  }
-  // nearby Bike Share stations: one colour ramp, extra trips vs normal in this slot
-  for (const [id, i] of near) {
-    const [x, y] = P(DATA.bikes[id].xy), a = ev.actual[i][slot], n = ev.normal[i][slot];
-    mx.beginPath(); mx.arc(x, y, a - n >= 0.5 ? 6 : 4, 0, 7); mx.fillStyle = extraColor(a, n); mx.fill();
-    mx.lineWidth = 1; mx.strokeStyle = "#fff"; mx.stroke();
-  }
-  // subway stations
-  for (const s of DATA.stations) {
-    const [x, y] = P(s.xy);
-    mx.beginPath(); mx.arc(x, y, 3.5, 0, 7); mx.fillStyle = "#fff"; mx.fill(); mx.lineWidth = 1.5; mx.strokeStyle = "#555"; mx.stroke();
-  }
-  for (const s of ev.affected) {
-    const [x, y] = P(stationXY[s]);
-    if (after) { mx.beginPath(); mx.arc(x, y, 12, 0, 7); mx.fillStyle = "rgba(214,45,32,.15)"; mx.fill(); }
-    mx.beginPath(); mx.arc(x, y, 7, 0, 7); mx.fillStyle = RED; mx.fill(); mx.lineWidth = 2; mx.strokeStyle = "#fff"; mx.stroke();
-  }
-  // labels: stopped station, line terminals in view, and whatever is hovered
+  layer(FAINT, ctx => { for (const [id, b] of Object.entries(DATA.bikes)) if (!near.has(id)) { const [x, y] = P(b.xy); ctx.fillRect(x - 1, y - 1, 2, 2); } });
+  lines(P, 6);
+  const centres = ev.affected.map(s => P(stationXY[s]));
+  layer(RING, ctx => { ctx.setLineDash([6, 6]); ctx.lineWidth = 2; for (const [x, y] of centres) { ctx.beginPath(); ctx.arc(x, y, 10 * k, 0, 7); ctx.stroke(); } });
+  if (slot >= K0) layer(HALO, dots(centres, 14));
+  // nearby Bike Share stations: one colour ramp, extra trips vs normal in this slot (white rim, then colour)
+  const bikes = [...near].map(([id, i]) => [P(DATA.bikes[id].xy), ev.actual[i][slot] - ev.normal[i][slot]]);
+  const small = w < 500, size = d => (d >= 0.5 ? 7 : 5) * (small ? 0.7 : 1);
+  layer("#ffffff", ctx => bikes.forEach(([[x, y], d]) => { ctx.beginPath(); ctx.arc(x, y, size(d) + 1.5, 0, 7); ctx.fill(); }));
+  RAMP.forEach((color, step) => layer(color, ctx => bikes.forEach(([[x, y], d]) => {
+    if (Math.max(0, Math.min(3, Math.round(d))) === step) { ctx.beginPath(); ctx.arc(x, y, size(d), 0, 7); ctx.fill(); }
+  })));
+  // subway stations: dark rim, white centre; the stopped one red
+  const stations = DATA.stations.map(s => P(s.xy));
+  layer("#555555", dots(stations, 6));
+  layer("#ffffff", dots(stations, 4));
+  layer("#ffffff", dots(centres, 10));
+  layer(RED, dots(centres, 8));
+  minimap(w, h);
+  mx.imageSmoothingEnabled = false;
+  mx.drawImage(art, 0, 0, art.width * ART, art.height * ART);
+  // labels: stopped station and line terminals in view; others on hover
   for (const s of DATA.stations) {
     const [x, y] = P(s.xy);
     if (ev.affected.includes(s.name)) label(short(s.name), [x, y], { bold: true, color: RED });
     else if (terminals.has(s.name) && x > 0 && x < w - 60 && y > 0 && y < h) label(short(s.name), [x, y]);
   }
-  minimap(w, h);
 }
 
 function minimap(w, h) {   // whole city in a corner, with a box where we are
   const mw = Math.min(150, w * (w < 500 ? 0.22 : 0.3)), s = mw / W, mh = H * s, ox = w - mw - 10, oy = 10;
   const T = ([x, y]) => [ox + x * s, oy + y * s];
-  mx.save();
-  mx.beginPath(); mx.rect(ox, oy, mw, mh); mx.fillStyle = "#fff"; mx.fill(); mx.clip();
-  lake(mx, T); lines(mx, T, 2);
-  mx.lineWidth = 1.5; mx.strokeStyle = RED; mx.strokeRect(ox + view.x * s, oy + view.y * s, view.w * s, view.h * s);
-  mx.restore();
-  mx.lineWidth = 1; mx.strokeStyle = "#e2e0da"; mx.strokeRect(ox, oy, mw, mh);
+  const clip = ctx => { ctx.beginPath(); ctx.rect(ox, oy, mw, mh); ctx.clip(); };
+  layer("#e2e0da", ctx => ctx.fillRect(ox - 2, oy - 2, mw + 4, mh + 4));
+  layer("#ffffff", ctx => ctx.fillRect(ox, oy, mw, mh));
+  layer(LAKE, ctx => { clip(ctx); lake(T)(ctx); });
+  lines(T, 3, clip);
+  layer(RED, ctx => { ctx.lineWidth = 2; ctx.strokeRect(ox + view.x * s, oy + view.y * s, view.w * s, view.h * s); });
 }
 
 function drawChart() {
