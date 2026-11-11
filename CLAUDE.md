@@ -65,7 +65,7 @@ Add one line per decision that code alone would not explain, with the date.
 - 2026-11-10: 2016 and 2017 Q3-Q4 trips have no station ids; ids are filled from names learned in other years (2025 end names excluded: they copy the start name).
 - 2026-11-11: Finding method: difference-in-differences event study (10+ min delays 2023-02 to 2026-08, rings 0-250/250-500/500-1000 m, matched same-weekday control days ±1-4 weeks, >2 km stations as citywide control, event bootstrap, fake-event placebo). Analysis needs numpy and matplotlib (pinned in requirements.txt).
 - 2026-11-11: Delay-length model scored once on held-out 2025-2026: MAE 3.88 vs 4.01 for the per-cause-code median baseline; no gain for 20+ min warnings. 2025-2026 is now spent as a test set; tune any new model on other years. scikit-learn pinned.
-- 2026-11-11: Walk-or-wait rule built on 2014-2022 delays, scored once on 2023-2024 (beats always wait/bike/walk at 5/10/15 min). 2023-2024 is now spent for this rule; assumes bikes are available until live dock history exists.
+- 2026-11-11: Walk-or-wait rule uses real median Bike Share ride times between the docks (54 of 142 routes have 20+ trips; others 15 km/h). Built on 2014-2021, scored on 2022 (beats always wait/bike/walk at 5/10/15 min). Test years spent so far: 2022, 2023-2024, 2025-2026. Assumes bikes are available until live dock history exists.
 
 ## Agent config
 

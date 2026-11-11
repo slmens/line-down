@@ -1,113 +1,120 @@
-[
- {
-  "elapsed_minutes": 5,
-  "riders": 18323,
-  "rule_choices": {
-   "wait": 18065,
-   "bike": 248,
-   "walk": 10
-  },
-  "mean_minutes_to_next_station": {
-   "rule": 7.5,
-   "always wait": 8.08,
-   "always bike": 16.16,
-   "always walk": 21.64,
-   "best possible": 5.86
-  },
-  "rule_saves_vs_always_wait": {
-   "minutes": 0.58,
-   "range_95": [
-    0.47,
-    0.7
-   ]
-  },
-  "rule_saves_vs_always_bike": {
-   "minutes": 8.66,
-   "range_95": [
-    8.42,
-    8.89
-   ]
-  },
-  "rule_saves_vs_always_walk": {
-   "minutes": 14.14,
-   "range_95": [
-    13.9,
-    14.35
-   ]
-  }
+{
+ "coverage": {
+  "legs": 142,
+  "legs_with_real_ride_times_2017_2021": 54,
+  "legs_with_real_ride_times_2022": 59
  },
- {
-  "elapsed_minutes": 10,
-  "riders": 6219,
-  "rule_choices": {
-   "wait": 5994,
-   "bike": 215,
-   "walk": 10
+ "by_elapsed": [
+  {
+   "elapsed_minutes": 5,
+   "riders": 8110,
+   "rule_choices": {
+    "wait": 8000,
+    "bike": 99,
+    "walk": 11
+   },
+   "mean_minutes_to_next_station": {
+    "rule": 7.8,
+    "always wait": 8.65,
+    "always bike": 17.59,
+    "always walk": 22.27,
+    "best possible": 5.97
+   },
+   "rule_saves_vs_always_wait": {
+    "minutes": 0.85,
+    "range_95": [
+     0.62,
+     1.08
+    ]
+   },
+   "rule_saves_vs_always_bike": {
+    "minutes": 9.79,
+    "range_95": [
+     9.39,
+     10.17
+    ]
+   },
+   "rule_saves_vs_always_walk": {
+    "minutes": 14.47,
+    "range_95": [
+     14.13,
+     14.84
+    ]
+   }
   },
-  "mean_minutes_to_next_station": {
-   "rule": 10.94,
-   "always wait": 12.53,
-   "always bike": 15.74,
-   "always walk": 21.46,
-   "best possible": 7.61
+  {
+   "elapsed_minutes": 10,
+   "riders": 2797,
+   "rule_choices": {
+    "wait": 2687,
+    "bike": 99,
+    "walk": 11
+   },
+   "mean_minutes_to_next_station": {
+    "rule": 11.53,
+    "always wait": 13.99,
+    "always bike": 16.55,
+    "always walk": 21.49,
+    "best possible": 7.73
+   },
+   "rule_saves_vs_always_wait": {
+    "minutes": 2.46,
+    "range_95": [
+     1.84,
+     3.15
+    ]
+   },
+   "rule_saves_vs_always_bike": {
+    "minutes": 5.01,
+    "range_95": [
+     4.07,
+     5.76
+    ]
+   },
+   "rule_saves_vs_always_walk": {
+    "minutes": 9.96,
+    "range_95": [
+     9.1,
+     10.81
+    ]
+   }
   },
-  "rule_saves_vs_always_wait": {
-   "minutes": 1.6,
-   "range_95": [
-    1.29,
-    1.93
-   ]
-  },
-  "rule_saves_vs_always_bike": {
-   "minutes": 4.81,
-   "range_95": [
-    4.28,
-    5.31
-   ]
-  },
-  "rule_saves_vs_always_walk": {
-   "minutes": 10.52,
-   "range_95": [
-    10.02,
-    11.02
-   ]
+  {
+   "elapsed_minutes": 15,
+   "riders": 1421,
+   "rule_choices": {
+    "wait": 1317,
+    "bike": 93,
+    "walk": 11
+   },
+   "mean_minutes_to_next_station": {
+    "rule": 14.76,
+    "always wait": 19.15,
+    "always bike": 16.31,
+    "always walk": 21.59,
+    "best possible": 8.65
+   },
+   "rule_saves_vs_always_wait": {
+    "minutes": 4.39,
+    "range_95": [
+     3.2,
+     5.55
+    ]
+   },
+   "rule_saves_vs_always_bike": {
+    "minutes": 1.55,
+    "range_95": [
+     0.18,
+     2.95
+    ]
+   },
+   "rule_saves_vs_always_walk": {
+    "minutes": 6.83,
+    "range_95": [
+     5.24,
+     8.32
+    ]
+   }
   }
- },
- {
-  "elapsed_minutes": 15,
-  "riders": 3154,
-  "rule_choices": {
-   "wait": 2918,
-   "bike": 226,
-   "walk": 10
-  },
-  "mean_minutes_to_next_station": {
-   "rule": 13.08,
-   "always wait": 16.24,
-   "always bike": 15.76,
-   "always walk": 21.65,
-   "best possible": 8.44
-  },
-  "rule_saves_vs_always_wait": {
-   "minutes": 3.15,
-   "range_95": [
-    2.59,
-    3.75
-   ]
-  },
-  "rule_saves_vs_always_bike": {
-   "minutes": 2.68,
-   "range_95": [
-    1.76,
-    3.48
-   ]
-  },
-  "rule_saves_vs_always_walk": {
-   "minutes": 8.56,
-   "range_95": [
-    7.69,
-    9.42
-   ]
-  }
- }
-]
+ ]
+}

@@ -237,8 +237,15 @@ class WalkOrWaitTest(unittest.TestCase):
         self.assertEqual((choice, p), ("bike", 0.6))
         self.assertEqual(self.w.decide(left, bike=20, walk=10)[0], "walk")
 
-    def test_option_minutes(self):
-        # 800 m apart, docks 80 m from each station, 800 m dock to dock
-        bike, walk = self.w.option_minutes(("1", "A", "B", 800, 80, 80, 800))
+    def test_option_minutes_prefers_real_ride_times(self):
+        # 800 m apart, docks 80 m from each station, 800 m dock to dock, docks 7001 -> 7002
+        leg = ("1", "A", "B", 800, 80, 80, 800, 7001, 7002)
+        walk_parts = 3 + 80 * 1.3 / 80 + 80 * 1.3 / 80 + 2
+        bike, walk, measured = self.w.option_minutes(leg, {})
         self.assertAlmostEqual(walk, 3 + 800 * 1.3 / 80 + 2)
-        self.assertAlmostEqual(bike, 3 + 80 * 1.3 / 80 + 800 * 1.3 / 250 + 80 * 1.3 / 80 + 2)
+        self.assertAlmostEqual(bike, walk_parts + 800 * 1.3 / 250)  # no history: 15 km/h
+        self.assertFalse(measured)
+        bike, _, measured = self.w.option_minutes(leg, {(7001, 7002): (6.5, 120)})
+        self.assertAlmostEqual(bike, walk_parts + 6.5)               # real median ride
+        self.assertTrue(measured)
+        self.assertFalse(self.w.option_minutes(leg, {(7002, 7001): (6.5, 120)})[2])  # direction matters
