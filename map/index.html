@@ -5,64 +5,80 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Line Down map</title>
 <style>
-  :root { --bg: #101218; --panel: #181b23; --text: #e8e6df; --dim: #8b8f9a; --hot: #ffd23f; --cold: #4a7bd0; --red: #ff3b30; }
+  :root { color-scheme: light; --bg: #f6f5f1; --ink: #1d1d1f; --dim: #6e6e73; --line: #e2e0da; --red: #d62d20;
+          --o0: #d6d3cc; --o1: #fdb36b; --o2: #f47b20; --o3: #b93e09; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 ui-monospace, Menlo, Consolas, monospace; }
-  main { max-width: 1280px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) 380px; }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
-  h1 { font-size: 20px; margin: 0 0 4px; }
-  h1 + p { margin: 0 0 12px; color: var(--dim); }
-  canvas { display: block; width: 100%; image-rendering: pixelated; background: var(--bg); }
-  #map { border: 2px solid #2a2f3a; }
-  aside { display: flex; flex-direction: column; gap: 12px; }
-  .events { display: grid; gap: 6px; }
-  .events button { text-align: left; font: inherit; font-size: 13px; color: var(--text); background: var(--panel); border: 2px solid #2a2f3a; padding: 6px 8px; cursor: pointer; }
-  .events button[aria-pressed="true"] { border-color: var(--red); }
-  .events button:focus-visible, .controls *:focus-visible { outline: 2px solid var(--hot); outline-offset: 2px; }
-  .badge { display: inline-block; width: 1.4em; text-align: center; color: #000; font-weight: bold; margin-right: 6px; }
-  .controls { display: flex; gap: 8px; align-items: center; }
-  .controls button { font: inherit; background: var(--panel); color: var(--text); border: 2px solid #2a2f3a; padding: 4px 10px; cursor: pointer; }
-  .controls input { flex: 1; accent-color: var(--hot); }
-  #clock { font-size: 18px; }
-  #caption, #now { margin: 0; }
-  #now { min-height: 2.9em; }
-  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--dim); }
-  .sw { display: inline-block; width: 10px; height: 10px; margin-right: 5px; vertical-align: -1px; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 20px 16px 32px; }
+  .kicker { margin: 0; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--dim); }
+  h1 { margin: 4px 0; font-size: clamp(21px, 3vw, 30px); line-height: 1.2; font-weight: 650; }
+  h1 b { color: var(--o3); }
+  #sub { margin: 0 0 16px; color: var(--dim); }
+  .grid { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr) 320px; align-items: start; }
+  @media (max-width: 880px) { .grid { grid-template-columns: 1fr; } }
+  .mapbox { position: relative; }
+  canvas { display: block; width: 100%; }
+  #map { border-radius: 10px; background: #fbfaf7; box-shadow: 0 0 0 1px var(--line); }
+  #tip { position: absolute; pointer-events: none; background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,.08); display: none; white-space: nowrap; }
+  .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-top: 10px; font-size: 13px; color: var(--dim); }
+  .ramp { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+  .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; vertical-align: -1px; }
+  aside { display: flex; flex-direction: column; gap: 14px; }
+  .controls { display: flex; gap: 10px; align-items: center; }
+  .controls button { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: #fff; color: var(--ink); font-size: 14px; cursor: pointer; }
+  .controls input { flex: 1; accent-color: var(--o2); }
+  #now { margin: 0; font-size: 14px; min-height: 2.9em; }
+  .chart-title { margin: 0 0 4px; font-size: 13px; color: var(--dim); }
+  h2 { margin: 6px 0 0; font-size: 13px; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: .04em; }
+  .events { display: grid; gap: 2px; }
+  .events button { display: flex; align-items: center; gap: 8px; text-align: left; font: inherit; font-size: 14px; color: var(--ink); background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 6px 8px; cursor: pointer; }
+  .events button:hover { background: #fff; }
+  .events button[aria-pressed="true"] { background: #fff; border-color: var(--line); font-weight: 600; }
+  .events small { color: var(--dim); font-weight: 400; margin-left: auto; }
+  .badge { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--o2); outline-offset: 2px; }
   .note { font-size: 13px; color: var(--dim); margin: 0; }
 </style>
 </head>
 <body>
-<main>
-  <section>
-    <h1>Line Down: when the subway stops, does Toronto grab a bike?</h1>
-    <p>Real TTC delays, replayed. Bike Share stations near the stop light up when more trips start there than on a normal day.</p>
-    <canvas id="map" role="img" aria-label="Pixel map of Toronto's subway and Bike Share stations"></canvas>
-    <div class="legend" style="margin-top:8px">
-      <span><span class="sw" style="background:var(--red)"></span>stopped station (dashed ring: 1 km)</span>
-      <span><span class="sw" style="background:var(--hot)"></span>more bike trips than normal</span>
-      <span><span class="sw" style="background:#d0d4dc"></span>about normal</span>
-      <span><span class="sw" style="background:var(--cold)"></span>fewer than normal</span>
-      <span><span class="sw" style="background:#5a6070"></span>no trips either day</span>
+<div class="wrap">
+  <p class="kicker">Line Down · when the subway stops, does Toronto grab a bike?</p>
+  <h1 id="headline" aria-live="polite">Loading…</h1>
+  <p id="sub"></p>
+  <div class="grid">
+    <div class="mapbox">
+      <canvas id="map" role="img" aria-label="Map of the stopped subway station and the Bike Share stations around it"></canvas>
+      <div id="tip"></div>
+      <div class="legend">
+        <span class="ramp">Bike Share stations, extra trips vs a normal day in these 15 min:
+          <span><span class="dot" style="background:var(--o0)"></span> none</span>
+          <span><span class="dot" style="background:var(--o1)"></span> +1</span>
+          <span><span class="dot" style="background:var(--o2)"></span> +2</span>
+          <span><span class="dot" style="background:var(--o3)"></span> +3 or more</span></span>
+        <span><span class="dot" style="background:var(--red)"></span> stopped station (dashed ring: 1 km)</span>
+      </div>
     </div>
-  </section>
-  <aside>
-    <div class="events" id="events" aria-label="Pick a disruption"></div>
-    <p id="caption" aria-live="polite"></p>
-    <div class="controls">
-      <button id="play" aria-label="Play">▶</button>
-      <input id="slider" type="range" min="0" max="15" value="0" aria-label="Time">
-      <span id="clock"></span>
-    </div>
-    <p id="now" aria-live="polite"></p>
-    <canvas id="chart" width="360" height="170" role="img" aria-label="Bike trips per 15 minutes within 1 km: that day versus normal days"></canvas>
-    <div class="legend">
-      <span><span class="sw" style="background:var(--hot)"></span>trips that day</span>
-      <span><span class="sw" style="background:#fff;height:3px;vertical-align:3px"></span>normal day (average)</span>
-      <span><span class="sw" style="background:#3c4252"></span>range of normal days</span>
-    </div>
-    <p class="note">Normal day = the same weekday and time, 1-4 weeks before and after, with no subway delay on that line. One disruption is noisy: weather and events move these numbers too. Averaged over 3,777 delays of 10+ minutes, trips within 250 m rise 13.6% in the first hour (95% range 9.9% to 17.3%), which is less than one extra trip per delay. Data: TTC delay log, Bike Share Toronto trips, TTC GTFS.</p>
-  </aside>
-</main>
+    <aside>
+      <div class="controls">
+        <button id="play" aria-label="Play">▶</button>
+        <input id="slider" type="range" min="0" max="15" value="0" aria-label="Time">
+      </div>
+      <p id="now" aria-live="polite"></p>
+      <div>
+        <p class="chart-title">Bike trips per 15 minutes within 1 km</p>
+        <canvas id="chart" role="img" aria-label="Bike trips per 15 minutes within 1 km: that day versus normal days"></canvas>
+        <div class="legend" style="margin-top:4px">
+          <span><span class="dot" style="background:var(--o2);border-radius:2px"></span> that day</span>
+          <span><span class="dot" style="background:#333;height:2px;border-radius:0;vertical-align:3px"></span> normal day</span>
+          <span><span class="dot" style="background:#e4e1da;border-radius:2px"></span> range of normal days</span>
+        </div>
+      </div>
+      <h2>Other disruptions</h2>
+      <div class="events" id="events"></div>
+      <p class="note">The longest subway delays since 2023 (weather left out). A normal day is the same weekday and time, 1-4 weeks before and after, with no delay on that line. One disruption is noisy. Averaged over 3,777 delays of 10+ minutes, trips within 250 m rise 13.6% in the first hour (95% range 9.9-17.3%), less than one extra trip per delay. Data: TTC delay log, Bike Share Toronto trips, TTC GTFS.</p>
+    </aside>
+  </div>
+</div>
 <script src="data.js"></script>
 <script src="map.js"></script>
 </body>

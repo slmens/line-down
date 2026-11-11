@@ -1,10 +1,11 @@
-"""Write map/data.js for the pixel map: geometry plus a few real past disruptions.
+"""Write map/data.js for the map: geometry plus a few real past disruptions.
 
 Usage: .venv/bin/python map/export.py   (reads the warehouse and the GTFS zip, read-only)
 
-Geometry is projected onto a 100 m pixel grid turned 17 degrees so the street grid
-(Yonge St) runs straight up, the way Toronto maps are usually drawn.
-  streets   every bus/streetcar route shape in the GTFS, rasterised (a city outline from our own data)
+Coordinates are in units of 100 m, turned 17 degrees so the street grid (Yonge St) runs straight
+up, the way Toronto maps are usually drawn.
+  shore     Lake Ontario's shoreline, traced as the southern edge of all bus/streetcar route shapes
+            in the GTFS (our own data, no map tiles), smoothed
   lines     subway route shapes, one per line, in TTC colours
   stations  subway and Bike Share stations
 
@@ -15,7 +16,6 @@ before to 3 hours after, on the day and on normal days (same weekday and time, 1
 after, skipping days with a 10+ min delay on the same line within 3 hours; at least 3 needed),
 the method of analysis/disruption_effect.py without the citywide control.
 """
-import base64
 import csv
 import io
 import json
@@ -31,7 +31,7 @@ DB = ROOT / "data" / "warehouse" / "linedown.duckdb"
 GTFS_DIR = ROOT / "data" / "raw" / "history" / "ttc-routes-and-schedules"
 OUT = ROOT / "map" / "data.js"   # a script, not JSON, so index.html also opens straight from disk
 
-CELL = 100                      # metres per map pixel
+CELL = 100                      # metres per map unit
 TURN = math.radians(-17)        # Toronto's street grid vs true north
 LAT0, LON0 = 43.70, -79.40
 K = list(range(-4, 12))         # 15-minute slots relative to the delay
@@ -71,6 +71,20 @@ def shape_event(rows, control_days):
         "total_normal_high": [max(totals[d][i] for d in control_days) for i in range(len(K))],
         "normal_days": nc,
     }
+
+
+def shoreline(cells, w, window=9):
+    """cells: occupied (x, y) map cells. Per column, the row just south of the southernmost cell,
+    smoothed by a moving average; columns with nothing stay open (None)."""
+    south = [None] * w
+    for x, y in cells:
+        if 0 <= x < w and (south[x] is None or y + 1 > south[x]):
+            south[x] = y + 1
+    out = []
+    for x in range(w):
+        near = [v for v in south[max(0, x - window // 2):x + window // 2 + 1] if v is not None]
+        out.append([x, round(sum(near) / len(near), 1)] if near else None)
+    return [p for p in out if p]
 
 
 def raster(points, cells):
@@ -177,11 +191,9 @@ def main():
     def px(xy):
         return [round((xy[0] - x0) / CELL, 1), round((xy[1] - y0) / CELL, 1)]
 
-    bits = bytearray((w * h + 7) // 8)
-    for cx, cy in cells:
-        i, j = cx - round(x0 / CELL), cy - round(y0 / CELL)
-        if 0 <= i < w and 0 <= j < h:
-            bits[(j * w + i) // 8] |= 1 << ((j * w + i) % 8)
+    shore = shoreline({(cx - round(x0 / CELL), cy - round(y0 / CELL)) for cx, cy in cells}, w)
+    ends = {line: [a, b] for line, a, b in con.execute(
+        "select line, arg_min(station, seq), arg_max(station, seq) from line_stations group by line").fetchall()}
 
     events = []
     for ev in pick_events(con):
@@ -207,15 +219,16 @@ def main():
 
     data = {
         "size": [w, h], "cell_m": CELL, "slot_minutes": [k * 15 for k in K],
-        "streets": base64.b64encode(bytes(bits)).decode(),
-        "lines": {name: {"name": LINE_NAMES.get(name, name), "color": c, "points": [px(p) for p in line[::3] + [line[-1]]]}
+        "shore": shore,
+        "lines": {name: {"name": LINE_NAMES.get(name, name), "color": c, "ends": ends.get(name, []),
+                         "points": [px(p) for p in line[::2] + [line[-1]]]}
                   for name, (line, c) in sorted(subway.items())},
         "stations": [{"name": s, "lines": lines, "xy": px(sxy[s])} for s, _, _, lines in stations],
         "bikes": {str(b): {"name": name, "xy": px(bxy[b])} for b, name, _, _ in bikes},
         "events": events,
     }
     OUT.write_text("const DATA = " + json.dumps(data, separators=(",", ":")) + ";\n")
-    print(f"wrote {OUT} ({OUT.stat().st_size // 1024} KB, {w}x{h} pixels, {len(events)} disruptions)")
+    print(f"wrote {OUT} ({OUT.stat().st_size // 1024} KB, {w}x{h} cells of 100 m, {len(events)} disruptions)")
 
 
 if __name__ == "__main__":

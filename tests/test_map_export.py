@@ -42,6 +42,13 @@ class ShapeEventTest(unittest.TestCase):
         self.assertLess(abs(finch[0] - union[0]), 0.15 * abs(finch[1] - union[1]))   # unturned it would be ~19%
         self.assertAlmostEqual(math.dist(union, finch), 15300, delta=600)        # about 15 km apart
 
+    def test_shoreline_is_south_edge_smoothed(self):
+        from export import shoreline
+        cells = {(0, 5), (0, 2), (1, 5), (2, 8), (4, 1)}      # column 3 empty
+        self.assertEqual(shoreline(cells, 5, window=1), [[0, 6], [1, 6], [2, 9], [4, 2]])
+        self.assertEqual(shoreline(cells, 5, window=3)[0], [0, 6.0])   # (6 + 6) / 2 at the edge
+        self.assertEqual(shoreline(cells, 5, window=3)[3], [3, 5.5])   # empty column borrows its neighbours
+
 
 if __name__ == "__main__":
     unittest.main()

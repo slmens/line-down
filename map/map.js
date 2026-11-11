@@ -1,179 +1,184 @@
-// Line Down pixel map. Draws DATA (from data.js, written by export.py) on a canvas: one map pixel = 100 m.
+// Line Down map. Draws DATA (from data.js, written by export.py) on a canvas; map units are 100 m.
 const [W, H] = DATA.size;
-const SLOTS = DATA.slot_minutes;
-const C = { bg: "#101218", street: "#1f232c", lake: "#12304f", bikeOff: "#5a6070", normal: "#d0d4dc",
-            hot: [255, 210, 63], cold: "#4a7bd0", red: "#ff3b30", station: "#ffffff" };
-
-// base layer: streets from bus/streetcar routes; lake = everything south of a column's last street pixel
-const bits = Uint8Array.from(atob(DATA.streets), c => c.charCodeAt(0));
-const street = i => (bits[i >> 3] >> (i & 7)) & 1;
-const base = document.createElement("canvas");
-base.width = W; base.height = H;
-{
-  const bx = base.getContext("2d"), img = bx.createImageData(W, H);
-  const put = (i, hex) => { const v = parseInt(hex.slice(1), 16); img.data.set([v >> 16, (v >> 8) & 255, v & 255, 255], i * 4); };
-  for (let x = 0; x < W; x++) {
-    let last = -1;
-    for (let y = 0; y < H; y++) if (street(y * W + x)) last = y;
-    for (let y = 0; y < H; y++) put(y * W + x, street(y * W + x) ? C.street : y > last + 2 ? C.lake : C.bg);
-  }
-  bx.putImageData(img, 0, 0);
-  for (const id of ["2", "4", "1"]) {   // Line 1 on top where they cross
-    const l = DATA.lines[id];
-    if (!l) continue;
-    bx.fillStyle = l.color;
-    l.points.slice(1).forEach(([x1, y1], i) => {   // solid 1-pixel steps, no anti-aliasing
-      const [x0, y0] = l.points[i], n = Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) * 2) || 1;
-      for (let t = 0; t <= n; t++) bx.fillRect(Math.floor(x0 + (x1 - x0) * t / n), Math.floor(y0 + (y1 - y0) * t / n), 1, 1);
-    });
-  }
-}
+const SLOTS = DATA.slot_minutes, K0 = SLOTS.indexOf(0);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const RAMP = ["--o0", "--o1", "--o2", "--o3"].map(css), RED = css("--red");
+const LAKE = "#d7e6f0", INK = "#1d1d1f";
 
 const map = document.getElementById("map"), mx = map.getContext("2d");
 const chart = document.getElementById("chart"), cx = chart.getContext("2d");
-const slider = document.getElementById("slider"), playBtn = document.getElementById("play");
+const slider = document.getElementById("slider"), playBtn = document.getElementById("play"), tip = document.getElementById("tip");
 const stationXY = Object.fromEntries(DATA.stations.map(s => [s.name, s.xy]));
-let ev = null, slot = 0, timer = null, view = { x: 0, y: 0, w: W, h: H };
+const terminals = new Set(Object.values(DATA.lines).flatMap(l => l.ends));
+let ev = null, slot = 0, timer = null, view = null, k = 1, hover = null;
 
-const fmtDay = iso => new Date(iso + ":00").toLocaleDateString("en-CA", { weekday: "long", day: "numeric", month: "short", year: "numeric" });
-function clock(iso, plusMin) {
-  const [h, m] = iso.slice(11, 16).split(":").map(Number), t = h * 60 + m + plusMin;
-  const hh = Math.floor(t / 60) % 24, mm = t % 60;
-  return `${(hh + 11) % 12 + 1}:${String(mm).padStart(2, "0")} ${hh < 12 ? "am" : "pm"}`;
-}
 const short = s => s.replace(/ Station$/, "");
-const lineColor = id => DATA.lines[id]?.color ?? "#888";
+const sum = a => a.reduce((x, y) => x + y, 0);
+const weekday = iso => new Date(iso + ":00").toLocaleDateString("en-CA", { weekday: "long" });
+const dateLong = iso => new Date(iso + ":00").toLocaleDateString("en-CA", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+function clock(iso, plus) {
+  const [h, m] = iso.slice(11, 16).split(":").map(Number), t = h * 60 + m + plus, hh = Math.floor(t / 60) % 24;
+  return `${(hh + 11) % 12 + 1}:${String(t % 60).padStart(2, "0")} ${hh < 12 ? "am" : "pm"}`;
+}
+const extraColor = (a, n) => RAMP[Math.max(0, Math.min(3, Math.round(a - n)))];
 
-function bikeColor(actual, normal) {
-  const diff = actual - normal;
-  if (actual === 0 && normal < 0.25) return C.bikeOff;
-  if (diff >= 0.5) { const a = Math.min(1, 0.45 + diff / 3); return `rgb(${C.hot.map(v => Math.round(v * a)).join()})`; }
-  if (diff <= -0.5) return C.cold;
-  return C.normal;
+// canvas sized in CSS pixels, drawn at devicePixelRatio so everything stays sharp
+function fit(canvas, ctx, cssH) {
+  const r = devicePixelRatio || 1, w = canvas.clientWidth;
+  canvas.style.height = cssH + "px"; canvas.width = Math.round(w * r); canvas.height = Math.round(cssH * r);
+  ctx.setTransform(r, 0, 0, r, 0, 0);
+  return w;
+}
+const P = ([x, y]) => [(x - view.x) * k, (y - view.y) * k];
+
+function path(ctx, pts, T) { ctx.beginPath(); pts.forEach((p, i) => { const [x, y] = T(p); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); }
+function lake(ctx, T) {   // shoreline, closed off far to the south
+  const s = DATA.shore, pts = [[-50, s[0][1]], ...s, [W + 50, s[s.length - 1][1]], [W + 50, H + 200], [-50, H + 200]];
+  path(ctx, pts, T); ctx.closePath(); ctx.fillStyle = LAKE; ctx.fill();
+}
+function lines(ctx, T, width) {
+  for (const id of ["2", "4", "1"]) {
+    const l = DATA.lines[id]; if (!l) continue;
+    path(ctx, l.points, T); ctx.strokeStyle = l.color; ctx.lineWidth = width; ctx.lineJoin = ctx.lineCap = "round"; ctx.stroke();
+  }
+}
+function label(text, [x, y], { bold = false, color = INK } = {}) {
+  mx.font = `${bold ? 600 : 500} 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif`;
+  mx.lineWidth = 4; mx.strokeStyle = "rgba(251,250,247,.95)"; mx.lineJoin = "round";
+  mx.strokeText(text, x + 9, y + 4); mx.fillStyle = color; mx.fillText(text, x + 9, y + 4);
 }
 
 function draw() {
-  // fit the map canvas to its CSS width, whole pixels per map pixel
-  const scale = Math.max(1, Math.floor(map.clientWidth / view.w));
-  map.width = view.w * scale; map.height = view.h * scale;
-  mx.imageSmoothingEnabled = false;
-  mx.drawImage(base, view.x, view.y, view.w, view.h, 0, 0, map.width, map.height);
-  const P = ([x, y]) => [Math.floor(x - view.x) * scale, Math.floor(y - view.y) * scale];
-  const dot = (xy, color, size = 1) => { const [px, py] = P(xy); mx.fillStyle = color; mx.fillRect(px - (size - 1) / 2 * scale, py - (size - 1) / 2 * scale, size * scale, size * scale); };
+  const w = fit(map, mx, Math.round(Math.min(map.clientWidth * 0.72, innerHeight * 0.7)));
+  const h = map.height / (devicePixelRatio || 1);
+  // view: about 6 km across (4 km on a phone), centred on the stopped station(s), same aspect as the canvas
+  const pts = ev.affected.map(s => stationXY[s]);
+  const c = [sum(pts.map(p => p[0])) / pts.length, sum(pts.map(p => p[1])) / pts.length];
+  const vw = Math.max(60, Math.max(...pts.map(p => p[0])) - Math.min(...pts.map(p => p[0])) + 35) * (w < 500 ? 0.55 : 1);
+  k = w / vw; view = { x: c[0] - vw / 2, y: c[1] - h / k / 2, w: vw, h: h / k };
 
-  const near = ev ? new Map(ev.stations.map((id, i) => [String(id), i])) : new Map();
-  for (const [id, b] of Object.entries(DATA.bikes)) {
-    if (near.has(id)) continue;
-    dot(b.xy, "#353a46");
+  mx.clearRect(0, 0, w, h);
+  lake(mx, P);
+  // other Bike Share stations: faint context
+  const near = new Map(ev.stations.map((id, i) => [String(id), i]));
+  mx.fillStyle = "#dcd9d2";
+  for (const [id, b] of Object.entries(DATA.bikes)) if (!near.has(id)) { const [x, y] = P(b.xy); mx.fillRect(x - 1, y - 1, 2, 2); }
+  lines(mx, P, 5);
+  // 1 km ring
+  const after = slot >= K0;
+  for (const s of ev.affected) {
+    const [x, y] = P(stationXY[s]);
+    mx.beginPath(); mx.arc(x, y, 10 * k, 0, 7); mx.setLineDash([4, 4]); mx.lineWidth = 1.2; mx.strokeStyle = "rgba(214,45,32,.55)"; mx.stroke(); mx.setLineDash([]);
   }
-  if (ev) {
-    const blink = slot >= 4 && Math.floor(Date.now() / 400) % 2;
-    for (const [id, i] of near) dot(DATA.bikes[id].xy, bikeColor(ev.actual[i][slot], ev.normal[i][slot]));
-    // 1 km ring around each stopped station
-    mx.strokeStyle = "rgba(255,59,48,0.7)"; mx.lineWidth = Math.max(1, Math.round(scale / 2)); mx.setLineDash([scale, scale]);
-    for (const s of ev.affected) { const [px, py] = P(stationXY[s]); mx.beginPath(); mx.arc(px + scale / 2, py + scale / 2, 10 * scale, 0, 7); mx.stroke(); }
-    mx.setLineDash([]);
+  // nearby Bike Share stations: one colour ramp, extra trips vs normal in this slot
+  for (const [id, i] of near) {
+    const [x, y] = P(DATA.bikes[id].xy), a = ev.actual[i][slot], n = ev.normal[i][slot];
+    mx.beginPath(); mx.arc(x, y, a - n >= 0.5 ? 6 : 4, 0, 7); mx.fillStyle = extraColor(a, n); mx.fill();
+    mx.lineWidth = 1; mx.strokeStyle = "#fff"; mx.stroke();
   }
-  for (const s of DATA.stations) dot(s.xy, C.station);
-  if (ev) for (const s of ev.affected) dot(stationXY[s], slot >= 4 && Math.floor(Date.now() / 400) % 2 ? "#7a1a14" : C.red, 2);
+  // subway stations
+  for (const s of DATA.stations) {
+    const [x, y] = P(s.xy);
+    mx.beginPath(); mx.arc(x, y, 3.5, 0, 7); mx.fillStyle = "#fff"; mx.fill(); mx.lineWidth = 1.5; mx.strokeStyle = "#555"; mx.stroke();
+  }
+  for (const s of ev.affected) {
+    const [x, y] = P(stationXY[s]);
+    if (after) { mx.beginPath(); mx.arc(x, y, 12, 0, 7); mx.fillStyle = "rgba(214,45,32,.15)"; mx.fill(); }
+    mx.beginPath(); mx.arc(x, y, 7, 0, 7); mx.fillStyle = RED; mx.fill(); mx.lineWidth = 2; mx.strokeStyle = "#fff"; mx.stroke();
+  }
+  // labels: stopped station, line terminals in view, and whatever is hovered
+  for (const s of DATA.stations) {
+    const [x, y] = P(s.xy);
+    if (ev.affected.includes(s.name)) label(short(s.name), [x, y], { bold: true, color: RED });
+    else if (terminals.has(s.name) && x > 0 && x < w - 60 && y > 0 && y < h) label(short(s.name), [x, y]);
+  }
+  minimap(w, h);
+}
 
-  // labels: affected stations first, then as many others as fit without overlapping; a few anchors citywide
-  // (inside the 1 km ring only the stopped station is labelled, so labels never hide bike stations)
-  const outside = n => ev.affected.every(a => Math.hypot(stationXY[n][0] - stationXY[a][0], stationXY[n][1] - stationXY[a][1]) > 12);
-  const labels = ev ? [...ev.affected, ...DATA.stations.map(s => s.name).filter(outside)] : ["Union Station", "Bloor-Yonge Station", "Finch Station", "Kipling Station", "Kennedy Station", "Vaughan Metropolitan Centre Station", "Don Mills Station"];
-  mx.font = `${Math.max(11, Math.min(16, Math.round(scale * 2)))}px ui-monospace, Menlo, monospace`;
-  mx.textBaseline = "middle";
-  const placed = [];
-  for (const name of labels) {
-    const xy = stationXY[name];
-    if (!xy || xy[0] < view.x || xy[0] > view.x + view.w || xy[1] < view.y || xy[1] > view.y + view.h) continue;
-    const [px, py] = P(xy), hot = ev?.affected.includes(name);
-    const t = short(name), tw = mx.measureText(t).width;
-    const box = [px + scale * 2, py - scale, tw + 6, scale * 2.6];
-    if (placed.some(b => box[0] < b[0] + b[2] && b[0] < box[0] + box[2] && box[1] < b[1] + b[3] && b[1] < box[1] + box[3])) continue;
-    placed.push(box);
-    mx.fillStyle = "rgba(16,18,24,0.75)";
-    mx.fillRect(px + scale * 2, py - scale, tw + 6, scale * 2.6);
-    mx.fillStyle = hot ? C.red : "#d8d6cf";
-    mx.fillText(t, px + scale * 2 + 3, py + scale * 0.3);
-  }
-  if (!ev || view.y + view.h > H - 20) {
-    mx.fillStyle = "#4f78a6";
-    mx.fillText("LAKE ONTARIO", (Math.min(W - 40, view.x + view.w * 0.5) - view.x) * scale, (H - 6 - view.y) * scale);
-  }
-  drawChart();
+function minimap(w, h) {   // whole city in a corner, with a box where we are
+  const mw = Math.min(150, w * (w < 500 ? 0.22 : 0.3)), s = mw / W, mh = H * s, ox = w - mw - 10, oy = 10;
+  const T = ([x, y]) => [ox + x * s, oy + y * s];
+  mx.save();
+  mx.beginPath(); mx.rect(ox, oy, mw, mh); mx.fillStyle = "#fff"; mx.fill(); mx.clip();
+  lake(mx, T); lines(mx, T, 2);
+  mx.lineWidth = 1.5; mx.strokeStyle = RED; mx.strokeRect(ox + view.x * s, oy + view.y * s, view.w * s, view.h * s);
+  mx.restore();
+  mx.lineWidth = 1; mx.strokeStyle = "#e2e0da"; mx.strokeRect(ox, oy, mw, mh);
 }
 
 function drawChart() {
-  const w = chart.width, h = chart.height, padL = 26, padB = 22, bw = (w - padL) / SLOTS.length;
-  cx.fillStyle = C.bg; cx.fillRect(0, 0, w, h);
-  if (!ev) return;
-  const top = Math.max(...ev.total_actual, ...ev.total_normal_high, 4) * 1.15;
-  const Y = v => (h - padB) - v / top * (h - padB - 6);
-  cx.font = "11px ui-monospace, Menlo, monospace"; cx.fillStyle = "#8b8f9a";
-  cx.fillText(String(Math.round(top / 1.15)), 2, Y(top / 1.15) + 4); cx.fillText("0", 2, Y(0));
+  const w = fit(chart, cx, 140), h = 140, padL = 24, padB = 20, bw = (w - padL) / SLOTS.length;
+  const top = Math.max(...ev.total_actual, ...ev.total_normal_high, 4);
+  const Y = v => (h - padB) - v / top * (h - padB - 8);
+  cx.clearRect(0, 0, w, h);
+  cx.font = "11px -apple-system, Helvetica, Arial, sans-serif"; cx.fillStyle = "#8e8e93";
+  cx.fillText(String(top), 0, Y(top) + 4); cx.fillText("0", 0, Y(0));
   SLOTS.forEach((m, i) => {
     const x = padL + i * bw;
-    cx.fillStyle = "#3c4252";   // normal-day range
-    cx.fillRect(x + 1, Y(ev.total_normal_high[i]), bw - 2, Math.max(2, Y(ev.total_normal_low[i]) - Y(ev.total_normal_high[i])));
-    cx.fillStyle = i === slot ? "#ffd23f" : i < slot ? "#b8962c" : "#4a4434";
-    const bh = Math.round(Y(0) - Y(ev.total_actual[i]));
-    cx.fillRect(x + bw * 0.25, Y(0) - bh, bw * 0.5, bh);
-    cx.fillStyle = "#fff";
-    cx.fillRect(x + 1, Math.round(Y(ev.total_normal[i])) - 1, bw - 2, 3);
+    cx.fillStyle = "#e4e1da";
+    cx.fillRect(x + 1, Y(ev.total_normal_high[i]), bw - 2, Math.max(1, Y(ev.total_normal_low[i]) - Y(ev.total_normal_high[i])));
+    cx.fillStyle = i === slot ? RAMP[3] : i < slot ? RAMP[2] : "#f6c9a6";
+    cx.fillRect(x + bw * 0.22, Y(ev.total_actual[i]), bw * 0.56, Y(0) - Y(ev.total_actual[i]));
   });
-  const x0 = padL + 4 * bw;
-  cx.fillStyle = C.red; cx.fillRect(x0 - 1, 0, 2, h - padB);
-  cx.fillStyle = "#8b8f9a";
-  cx.fillText("-1 h", padL, h - 6); cx.fillText("delay", x0 + 3, h - 6); cx.fillText("+3 h", w - 30, h - 6);
+  cx.beginPath(); SLOTS.forEach((m, i) => { const x = padL + i * bw; cx.moveTo(x + 1, Y(ev.total_normal[i])); cx.lineTo(x + bw - 1, Y(ev.total_normal[i])); });
+  cx.strokeStyle = "#333"; cx.lineWidth = 2; cx.stroke();
+  const xd = padL + K0 * bw;
+  cx.fillStyle = RED; cx.fillRect(xd - 0.5, 0, 1, h - padB);
+  cx.fillStyle = "#8e8e93";
+  [["−1 h", 0], ["delay", K0], ["+1 h", K0 + 4], ["+2 h", K0 + 8]].forEach(([t, i]) => cx.fillText(t, padL + i * bw + 2, h - 5));
 }
 
 function describe() {
-  if (!ev) return;
-  const first = ev.total_actual.slice(4, 8).reduce((a, b) => a + b, 0), normal = ev.total_normal.slice(4, 8).reduce((a, b) => a + b, 0);
-  const verdict = first > normal * 1.1 ? "more than" : first < normal * 0.9 ? "fewer than" : "about the same as";
+  const first = sum(ev.total_actual.slice(K0, K0 + 4)), normal = Math.round(sum(ev.total_normal.slice(K0, K0 + 4)));
+  document.getElementById("headline").innerHTML =
+    `<b>${first}</b> bike trips started within 1 km in the hour after, vs <b style="color:inherit">${normal}</b> on a normal ${weekday(ev.when)}`;
   const where = ev.to ? `between ${short(ev.from)} and ${short(ev.to)}` : `at ${short(ev.from)}`;
-  document.getElementById("caption").textContent =
-    `${fmtDay(ev.when)}, ${clock(ev.when, 0)}. Line ${ev.line} was stopped ${where}, logged as a ${ev.min_delay}-minute delay` +
-    `${ev.cause ? ` (${ev.cause.toLowerCase().replace(/\bttc\b/g, "TTC")})` : ""}. In the hour after, ${first} Bike Share trips started within 1 km: ` +
-    `${verdict} a normal ${fmtDay(ev.when).split(",")[0]} at that time (${normal.toFixed(0)} on average over ${ev.normal_days} normal days).`;
+  const cause = ev.cause ? `: ${ev.cause.toLowerCase().replace(/\bttc\b/g, "TTC")}` : "";
+  document.getElementById("sub").textContent =
+    `Line ${ev.line} stopped ${where}, ${dateLong(ev.when)}, ${clock(ev.when, 0)}. Logged as a ${ev.min_delay}-minute delay${cause}.`;
   const m = SLOTS[slot], a = ev.total_actual[slot], n = ev.total_normal[slot];
-  document.getElementById("clock").textContent = clock(ev.slot0, m);
-  document.getElementById("now").textContent =
-    `${m < 0 ? `${-m} min before` : `${m} min after`} the delay: ${a} trip${a === 1 ? "" : "s"} started within 1 km ` +
-    `(normal day: ${n.toFixed(1)}, range ${ev.total_normal_low[slot]}-${ev.total_normal_high[slot]}).`;
+  const when = m < 0 ? `${-m} min before the delay` : m === 0 ? "the first 15 min of the delay" : `${m} min after the delay`;
+  document.getElementById("now").innerHTML =
+    `<b>${clock(ev.slot0, m)}</b> · ${when}<br>${a} trip${a === 1 ? "" : "s"} within 1 km; a normal day has ${n.toFixed(1)} (range ${ev.total_normal_low[slot]}-${ev.total_normal_high[slot]})`;
 }
 
+function render() { describe(); draw(); drawChart(); }
+function setSlot(i) { slot = i; slider.value = i; render(); }
+function play(on) {
+  clearInterval(timer); timer = null;
+  if (on) timer = setInterval(() => slot < SLOTS.length - 1 ? setSlot(slot + 1) : play(false), 1000);
+  playBtn.textContent = on ? "❚❚" : "▶"; playBtn.setAttribute("aria-label", on ? "Pause" : "Play");
+}
 function select(i) {
   ev = DATA.events[i];
   document.querySelectorAll(".events button").forEach((b, j) => b.setAttribute("aria-pressed", j === i));
-  // zoom to the stopped stretch: about 7 km across, kept inside the map
-  const pts = ev.affected.map(s => stationXY[s]);
-  const cxm = pts.reduce((a, p) => a + p[0], 0) / pts.length, cym = pts.reduce((a, p) => a + p[1], 0) / pts.length;
-  const vw = Math.max(100, Math.max(...pts.map(p => p[0])) - Math.min(...pts.map(p => p[0])) + 40), vh = Math.round(vw * 0.75);
-  view = { x: Math.round(Math.min(W - vw, Math.max(0, cxm - vw / 2))), y: Math.round(Math.min(H - vh, Math.max(0, cym - vh / 2))), w: vw, h: vh };
   setSlot(0); play(true);
 }
 
-function setSlot(k) { slot = k; slider.value = k; describe(); draw(); }
-function play(on) {
-  clearInterval(timer); timer = null;
-  if (on) timer = setInterval(() => slot < SLOTS.length - 1 ? setSlot(slot + 1) : play(false), 900);
-  playBtn.textContent = on ? "❚❚" : "▶"; playBtn.setAttribute("aria-label", on ? "Pause" : "Play");
-}
+// hover: name of the nearest subway or Bike Share station
+map.addEventListener("mousemove", e => {
+  const r = map.getBoundingClientRect(), mxp = e.clientX - r.left, myp = e.clientY - r.top;
+  let best = null, bd = 12;
+  for (const s of DATA.stations) { const [x, y] = P(s.xy), d = Math.hypot(x - mxp, y - myp); if (d < bd) { bd = d; best = short(s.name); } }
+  ev.stations.forEach((id, i) => {
+    const [x, y] = P(DATA.bikes[id].xy), d = Math.hypot(x - mxp, y - myp);
+    if (d < bd) { bd = d; best = `${DATA.bikes[id].name}: ${ev.actual[i][slot]} trip${ev.actual[i][slot] === 1 ? "" : "s"} (normal ${ev.normal[i][slot]})`; }
+  });
+  tip.style.display = best ? "block" : "none";
+  if (best) { tip.textContent = best; tip.style.left = Math.min(mxp + 12, r.width - tip.offsetWidth - 4) + "px"; tip.style.top = (myp + 12) + "px"; }
+});
+map.addEventListener("mouseleave", () => { tip.style.display = "none"; });
 
 const list = document.getElementById("events");
 DATA.events.forEach((e, i) => {
-  const b = document.createElement("button");
-  b.innerHTML = `<span class="badge" style="background:${lineColor(e.line)}">${e.line}</span>`;
-  b.append(`${short(e.from)}${e.to ? " to " + short(e.to) : ""} · ${e.when.slice(0, 10)} · ${e.min_delay} min`);
-  b.onclick = () => select(i);
-  list.append(b);
+  const b = document.createElement("button"), color = DATA.lines[e.line]?.color ?? "#888";
+  b.innerHTML = `<span class="badge" style="background:${color};color:${e.line === "1" ? "#000" : "#fff"}">${e.line}</span>`;
+  b.append(short(e.from) + (e.to ? " to " + short(e.to) : ""));
+  const small = document.createElement("small"); small.textContent = new Date(e.when + ":00").toLocaleDateString("en-CA", { month: "short", year: "numeric" });
+  b.append(small); b.onclick = () => select(i); list.append(b);
 });
 slider.max = SLOTS.length - 1;
 slider.oninput = () => { play(false); setSlot(+slider.value); };
-playBtn.onclick = () => ev ? play(!timer && (slot < SLOTS.length - 1 || (setSlot(0), true))) : select(0);
-addEventListener("resize", draw);
-setInterval(() => ev && slot >= 4 && draw(), 400);   // blink the stopped station
-document.getElementById("caption").textContent = "Pick a disruption to replay it. These are the longest subway delays since 2023 (weather left out), each with real Bike Share trips from 1 hour before to 3 hours after.";
-draw();
+playBtn.onclick = () => play(!timer && (slot < SLOTS.length - 1 || (setSlot(0), true)));
+addEventListener("resize", () => ev && render());
+select(0);
