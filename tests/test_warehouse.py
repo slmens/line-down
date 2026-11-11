@@ -211,3 +211,34 @@ class DelayBaselineTest(unittest.TestCase):
         big_all = 5 / 45
         self.assertAlmostEqual(share[40], (5 + 10 * big_all) / (5 + 10))  # smoothed toward overall
         self.assertAlmostEqual(share[46], big_all)
+
+
+@unittest.skipIf(np is None or duckdb is None, "analysis libraries not installed (use .venv/bin/python)")
+class WalkOrWaitTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / "models"))
+        import walk_or_wait
+        cls.w = walk_or_wait
+
+    def test_remaining_time_only_counts_delays_that_lasted_this_long(self):
+        history = {"A": np.array([3.0] * 100 + [20.0] * 40), "B": np.array([50.0] * 5)}
+        left = self.w.remaining_samples(history, "A", 10)
+        self.assertEqual(sorted(set(left)), [10.0])          # the 3-minute ones are gone
+        self.assertEqual(len(left), 40)
+        # too few B delays: falls back to every cause that reached 10 minutes
+        self.assertEqual(len(self.w.remaining_samples(history, "B", 10)), 45)
+
+    def test_decide_leaves_only_when_waiting_usually_loses(self):
+        left = np.array([1.0] * 6 + [30.0] * 4)                # usually short
+        self.assertEqual(self.w.decide(left, bike=10, walk=20)[0], "wait")
+        left = np.array([1.0] * 4 + [30.0] * 6)                # usually long
+        choice, p, _ = self.w.decide(left, bike=10, walk=20)
+        self.assertEqual((choice, p), ("bike", 0.6))
+        self.assertEqual(self.w.decide(left, bike=20, walk=10)[0], "walk")
+
+    def test_option_minutes(self):
+        # 800 m apart, docks 80 m from each station, 800 m dock to dock
+        bike, walk = self.w.option_minutes(("1", "A", "B", 800, 80, 80, 800))
+        self.assertAlmostEqual(walk, 3 + 800 * 1.3 / 80 + 2)
+        self.assertAlmostEqual(bike, 3 + 80 * 1.3 / 80 + 800 * 1.3 / 250 + 80 * 1.3 / 80 + 2)
