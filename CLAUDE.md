@@ -34,6 +34,7 @@ Watches Toronto's transport network and measures what happens when part of it fa
 ## Commands
 
 - Test: `.venv/bin/python -m unittest` (all); `python3 -m unittest` runs collector tests only, warehouse tests skip without DuckDB
+- Disruption finding: `.venv/bin/python analysis/disruption_effect.py && .venv/bin/python analysis/plot_effect.py` (writes `analysis/output/`; write-up in `analysis/FINDING.md`)
 - Build the warehouse: `.venv/bin/python warehouse/build.py` (about 70 s, uses all cores; `--twice` also checks the rebuild is identical). Output `data/warehouse/linedown.duckdb`
 - One bike share snapshot: `python3 collectors/bikeshare.py station_status`
 - One TTC alerts snapshot: `python3 collectors/ttc.py`
@@ -60,6 +61,7 @@ Add one line per decision that code alone would not explain, with the date.
 - 2026-11-10: A delay "X TO Y" means the whole stretch was affected: `subway_delays.station`/`station_to` hold the ends (both must be on the delay's line) and `delay_stations` lists every station between them, using `line_stations` order from GTFS.
 - 2026-11-10: Trips before 2023 are not important to the analysis; their 10-14% of trips at since-closed stations (no location) is accepted.
 - 2026-11-10: 2016 and 2017 Q3-Q4 trips have no station ids; ids are filled from names learned in other years (2025 end names excluded: they copy the start name).
+- 2026-11-11: Finding method: difference-in-differences event study (10+ min delays 2023-02 to 2026-08, rings 0-250/250-500/500-1000 m, matched same-weekday control days ±1-4 weeks, >2 km stations as citywide control, event bootstrap, fake-event placebo). Analysis needs numpy and matplotlib (pinned in requirements.txt).
 
 ## Agent config
 
