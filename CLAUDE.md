@@ -38,7 +38,7 @@ Watches Toronto's transport network and measures what happens when part of it fa
 - One TTC alerts snapshot: `python3 collectors/ttc.py`
 - Check for stopped collectors: `python3 collectors/check_fresh.py`
 - Download or refresh history: `python3 pipelines/download_history.py` (re-runnable; skips what it has; launchd runs it weekly)
-- Create warehouse venv: `~/.local/bin/uv python install 3.12 && ~/.local/bin/uv venv --python 3.12 .venv && ~/.local/bin/uv pip install --python .venv/bin/python -r requirements.txt`
+- Create warehouse venv: `~/.local/bin/uv python install 3.12 && { [ -d .venv ] || ~/.local/bin/uv venv --python 3.12 .venv; } && ~/.local/bin/uv pip install --python .venv/bin/python -r requirements.txt`
 - Run warehouse code: `.venv/bin/python <script>`
 - Start collectors on this Mac: `sh collectors/install_launchd.sh` (logs in `data/logs/`)
 
