@@ -61,3 +61,5 @@ Files: agency, calendar, calendar_dates, routes, shapes, stops, stop_times, trip
 5. **Bad bike rows**: 2020-10 has 249 rows with 9 instead of 10 fields; trip id and duration look fused (`10000084625`). 2019 has 16 blank durations. Durations <60 s are common (e.g. 17,782 in 2024) and >24 h appear (max 12.4M s ≈ 143 days); 2025 looks capped near 1 day. 2014–2015 data is aggregate counts only, not trips.
 
 Not measured: duplicate trip_ids across files, end-time vs duration consistency, delay `Day` vs `Date` agreement, GTFS station coordinates vs bike stations.
+
+- `read_xlsx` reads only the first sheet unless `sheet=` is given. Delay workbooks have one sheet per month with hand-typed names (2020: `Jan 2020`, `Feb 20`, `March '20`, `June20`…) and bike 2016 has two quarterly sheets (`tor_trips_2016_Q3 ` with a trailing space). The load must list sheets from `xl/workbook.xml` and read each one. Checked with DuckDB 2.0.0 on 2026-11-10.

@@ -28,7 +28,7 @@ Watches Toronto's transport network and measures what happens when part of it fa
 - Python 3.9 (macOS system `/usr/bin/python3`), standard library only so far.
 - Tests: `unittest` (stdlib).
 - Collectors and download pipeline stay on `/usr/bin/python3` 3.9, stdlib only.
-- Warehouse: DuckDB pinned in `requirements.txt` (2.0.0 needs Python >= 3.11), in `.venv/` on Python 3.12 via uv at `~/.local/bin/uv`. Not created yet: the uv install is pending approval.
+- Warehouse: DuckDB pinned in `requirements.txt` (2.0.0 needs Python >= 3.11), in `.venv/` on Python 3.12 via uv at `~/.local/bin/uv`. Created 2026-11-10 (Python 3.12.16). DuckDB's `excel` extension is fetched once from the official DuckDB repository (signature-checked) into `~/.duckdb/extensions/`.
 - Runs on a Mac mini under launchd.
 
 ## Commands
