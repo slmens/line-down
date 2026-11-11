@@ -27,7 +27,8 @@ Watches Toronto's transport network and measures what happens when part of it fa
 
 - Python 3.9 (macOS system `/usr/bin/python3`), standard library only so far.
 - Tests: `unittest` (stdlib).
-- Warehouse: DuckDB (planned, not set up yet).
+- Collectors and download pipeline stay on `/usr/bin/python3` 3.9, stdlib only.
+- Warehouse: DuckDB pinned in `requirements.txt` (2.0.0 needs Python >= 3.11), in `.venv/` on Python 3.12 via uv at `~/.local/bin/uv`. Not created yet: the uv install is pending approval.
 - Runs on a Mac mini under launchd.
 
 ## Commands
@@ -37,6 +38,8 @@ Watches Toronto's transport network and measures what happens when part of it fa
 - One TTC alerts snapshot: `python3 collectors/ttc.py`
 - Check for stopped collectors: `python3 collectors/check_fresh.py`
 - Download or refresh history: `python3 pipelines/download_history.py` (re-runnable; skips what it has; launchd runs it weekly)
+- Create warehouse venv: `~/.local/bin/uv python install 3.12 && ~/.local/bin/uv venv --python 3.12 .venv && ~/.local/bin/uv pip install --python .venv/bin/python -r requirements.txt`
+- Run warehouse code: `.venv/bin/python <script>`
 - Start collectors on this Mac: `sh collectors/install_launchd.sh` (logs in `data/logs/`)
 
 ## Decisions
