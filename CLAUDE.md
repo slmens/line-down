@@ -49,7 +49,7 @@ Add one line per decision that code alone would not explain, with the date.
 - 2026-11-10: TTC alerts from `alerts.ttc.ca/api/alerts/live-alerts`, stored only when the body's SHA-256 changes. Its `lastUpdated` is Toronto local time mislabelled `Z`; files are named by our fetch time instead.
 - 2026-11-10: All downloads go through `collectors/common.py`: HTTPS only, certificates verified, no redirects to another host, 10 MB cap, shape checked before saving. Downloads are never executed.
 - 2026-11-10: Each feed folder has a `LAST` file touched on every successful run; `check_fresh.py` (every 5 min) sends a macOS notification when one is too old.
-- 2026-11-10: History comes from Toronto Open Data (CKAN) datasets `ttc-subway-delay-data` and `bike-share-toronto-ridership-data`, saved untouched under `data/raw/history/<dataset>/<last-modified date>/`. Only CSV/XLSX/ZIP are kept (XML/JSON are copies). Each file is checked against the server Content-Length (the portal listing sizes are stale for some files) and zip CRCs verified; nothing is unzipped on disk.
+- 2026-11-10: History comes from Toronto Open Data (CKAN) datasets `ttc-subway-delay-data`, `bike-share-toronto-ridership-data` and `ttc-routes-and-schedules` (GTFS, for subway station locations), saved untouched under `data/raw/history/<dataset>/<last-modified date>/`. Only CSV/XLSX/ZIP are kept (XML/JSON are copies). Each file is checked against the server Content-Length (the portal listing sizes are stale for some files) and zip CRCs verified; nothing is unzipped on disk.
 
 ## Agent config
 

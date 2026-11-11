@@ -18,7 +18,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "collectors"))
 from common import RAW, download, fetch  # noqa: E402
 
 API = "https://ckan0.cf.opendata.inter.prod-toronto.ca/api/3/action/package_show?id="
-DATASETS = ("ttc-subway-delay-data", "bike-share-toronto-ridership-data")
+# ttc-routes-and-schedules is the TTC's GTFS: it holds the subway station locations
+DATASETS = ("ttc-subway-delay-data", "bike-share-toronto-ridership-data", "ttc-routes-and-schedules")
 HOSTS = {"ckan0.cf.opendata.inter.prod-toronto.ca", "opendata.toronto.ca"}
 FORMATS = {"CSV", "XLSX", "ZIP"}  # the XML/JSON copies and live datastore dumps duplicate these
 MAX_FILE = 1_000_000_000  # largest file today is ~390 MB
