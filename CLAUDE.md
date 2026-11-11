@@ -56,7 +56,9 @@ Add one line per decision that code alone would not explain, with the date.
 - 2026-11-10: History comes from Toronto Open Data (CKAN) datasets `ttc-subway-delay-data`, `bike-share-toronto-ridership-data` and `ttc-routes-and-schedules` (GTFS, for subway station locations), saved untouched under `data/raw/history/<dataset>/<last-modified date>/`. Only CSV/XLSX/ZIP are kept (XML/JSON are copies). Each file is checked against the server Content-Length (the portal listing sizes are stale for some files) and zip CRCs verified; nothing is unzipped on disk.
 - 2026-11-10: Warehouse = one DuckDB file rebuilt from scratch by `warehouse/build.py`: zips unpacked to a scratch dir as UTF-8, all-text staging, then `warehouse/sql/*.sql` in order. File quirks are in `warehouse/SOURCES.md`.
 - 2026-11-10: All warehouse times are Toronto local time (history is published that way; live UTC is converted).
-- 2026-11-10: Delay station text is matched to GTFS stations by key cleaning + `warehouse/seeds/station_aliases.csv` + unique prefix; line names, `X TO Y` segments and Scarborough RT stations stay unmatched (~9% of rows). Bloor and Yonge are merged into Bloor-Yonge.
+- 2026-11-10: Delay station text is matched to GTFS stations by key cleaning + `warehouse/seeds/station_aliases.csv` + unique prefix (among the delay's own line's stations when the line is known); line names and Scarborough RT stations stay unmatched (~9% of rows, 1.5% of 10+ min delays on Lines 1/2/4). Bloor and Yonge are merged into Bloor-Yonge.
+- 2026-11-10: A delay "X TO Y" means the whole stretch was affected: `subway_delays.station`/`station_to` hold the ends (both must be on the delay's line) and `delay_stations` lists every station between them, using `line_stations` order from GTFS.
+- 2026-11-10: Trips before 2023 are not important to the analysis; their 10-14% of trips at since-closed stations (no location) is accepted.
 - 2026-11-10: 2016 and 2017 Q3-Q4 trips have no station ids; ids are filled from names learned in other years (2025 end names excluded: they copy the start name).
 
 ## Agent config

@@ -67,6 +67,58 @@ class MacroTest(unittest.TestCase):
 
 
 @unittest.skipIf(duckdb is None, "duckdb not installed (use .venv/bin/python)")
+class DelayMatchingTest(unittest.TestCase):
+    """Runs the real 30_delays.sql on a toy Line 1 (Union - King - Queen) and Line 2 stretch."""
+
+    @classmethod
+    def setUpClass(cls):
+        c = cls.con = duckdb.connect()
+        c.execute((ROOT / "warehouse" / "sql" / "00_macros.sql").read_text())
+        c.execute("""
+            create table line_stations as select * from (values
+                ('1', 1, 'Union Station'), ('1', 2, 'King Station'), ('1', 3, 'Queen Station'),
+                ('1', 4, 'Sheppard West Station'), ('1', 5, 'Sheppard-Yonge Station'),
+                ('2', 1, 'Kennedy Station'), ('2', 2, 'Victoria Park Station')) t(line, seq, station);
+            create table subway_stations as select distinct station from line_stations;
+            create table seed_station_aliases as select * from (values ('SHEPPARD', 'Sheppard-Yonge Station')) t(key, station);
+            create table stg_delay_codes as select 'MUIS' as "CODE", 'Ill customer' as "DESCRIPTION";
+            create table stg_delays as select '45000' as date, '08:15' as time, null as day, station,
+                'MUIS' as code, '12' as min_delay, '15' as min_gap, 'N' as bound, line, null as vehicle,
+                'test' as source_file
+            from (values
+                ('UNION STATION TO QUEEN', 'YU'),    -- stretch, both ends exact
+                ('VICTORIA PARK TO KENNE', 'BD'),    -- end cut off, unique on Line 2
+                ('QUEEN STATION TO SH', 'YU'),       -- end ambiguous on Line 1
+                ('MCCOWAN STATION TO KEN', 'SRT'),   -- closed line, no line_stations
+                ('KING STATION', 'YU'),              -- single station
+                ('SHEPPARD STATION', 'YU')           -- alias
+            ) t(station, line);
+        """)
+        c.execute((ROOT / "warehouse" / "sql" / "30_delays.sql").read_text())
+
+    def test_stretches_and_singles(self):
+        got = {r: (s, t) for r, s, t in self.con.execute("select station_raw, station, station_to from subway_delays").fetchall()}
+        self.assertEqual(got, {
+            "UNION STATION TO QUEEN": ("Union Station", "Queen Station"),
+            "VICTORIA PARK TO KENNE": ("Victoria Park Station", "Kennedy Station"),
+            "QUEEN STATION TO SH": (None, None),
+            "MCCOWAN STATION TO KEN": (None, None),
+            "KING STATION": ("King Station", None),
+            "SHEPPARD STATION": ("Sheppard-Yonge Station", None),
+        })
+
+    def test_stretch_expands_to_every_station_between(self):
+        rows = self.con.execute("""
+            select d.station_raw, list(s.station order by s.station) from delay_stations s
+            join subway_delays d using (delay_id) group by 1""").fetchall()
+        got = dict(rows)
+        self.assertEqual(got["UNION STATION TO QUEEN"], ["King Station", "Queen Station", "Union Station"])
+        self.assertEqual(got["VICTORIA PARK TO KENNE"], ["Kennedy Station", "Victoria Park Station"])
+        self.assertEqual(got["KING STATION"], ["King Station"])
+        self.assertNotIn("QUEEN STATION TO SH", got)
+
+
+@unittest.skipIf(duckdb is None, "duckdb not installed (use .venv/bin/python)")
 class BuildHelpersTest(unittest.TestCase):
     def test_column_map(self):
         import build

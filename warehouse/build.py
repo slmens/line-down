@@ -252,6 +252,14 @@ def checks(con):
     print(f"\nsubway_delays: {dn:,} of {dstaged:,} staged | matched to a station: {dmatched:,} ({dmatched / dn:.1%})")
     if dn < dstaged * 0.999:
         fails.append(f"{dstaged - dn} delays had unparseable date/time")
+    (stretch, stretch_ok, big, big_ok) = q("""
+        select count(*) filter (where station_raw like '% TO %' and line in ('1', '2', '4')),
+               count(station_to),
+               count(*) filter (where min_delay >= 10 and line in ('1', '2', '4')),
+               count(station) filter (where min_delay >= 10 and line in ('1', '2', '4'))
+        from subway_delays""")[0]
+    print(f"  'X TO Y' stretches on Lines 1/2/4 matched at both ends: {stretch_ok:,} of {stretch:,}")
+    print(f"  10+ minute delays on Lines 1/2/4 with a station: {big_ok:,} of {big:,} ({big_ok / big:.1%})")
     print("  most common unmatched station texts:")
     for raw, k in q("select station_raw, count(*) from subway_delays where station is null group by 1 order by 2 desc, 1 limit 12"):
         print(f"    {k:>6,}  {raw}")
@@ -263,8 +271,8 @@ def checks(con):
     return fails
 
 
-CORE = ["trips", "subway_delays", "delay_codes", "subway_stations", "subway_platforms",
-        "bike_stations", "dock_snapshots", "dock_status", "ttc_alerts"]
+CORE = ["trips", "subway_delays", "delay_stations", "delay_codes", "subway_stations", "subway_platforms",
+        "line_stations", "bike_stations", "dock_snapshots", "dock_status", "ttc_alerts"]
 
 
 def fingerprint(con):
