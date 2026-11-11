@@ -49,6 +49,12 @@ class ShapeEventTest(unittest.TestCase):
         self.assertEqual(shoreline(cells, 5, window=3)[0], [0, 6.0])   # (6 + 6) / 2 at the edge
         self.assertEqual(shoreline(cells, 5, window=3)[3], [3, 5.5])   # empty column borrows its neighbours
 
+    def test_normal_day_is_closest_to_average(self):
+        from export import pick_normal_day
+        self.assertEqual(pick_normal_day({-7: 10, 7: 20, 14: 33}), 7)        # average 21
+        self.assertEqual(pick_normal_day({-14: 10, -7: 30, 7: 10, 14: 30}), -7)   # all tie at 10 away: nearest week, earlier first
+        self.assertEqual(pick_normal_day({21: 5}), 21)
+
 
 if __name__ == "__main__":
     unittest.main()

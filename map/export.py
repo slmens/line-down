@@ -15,6 +15,9 @@ because weather also changes cycling), each on its own day, with 10+ Bike Share 
 before to 3 hours after, on the day and on normal days (same weekday and time, 1-4 weeks before and
 after, skipping days with a 10+ min delay on the same line within 3 hours; at least 3 needed),
 the method of analysis/disruption_effect.py without the citywide control.
+
+Replay: every trip starting within 2.5 km of the affected stations in that window, on the day and on
+one normal day shown beside it. That day is picked by a fixed rule (pick_normal_day), never by how it looks.
 """
 import csv
 import io
@@ -39,6 +42,7 @@ CONTROL_DAYS = [-28, -21, -14, -7, 7, 14, 21, 28]
 MIN_CONTROLS = 3
 N_EVENTS = 8
 MIN_NORMAL_TRIPS = 20       # over the whole 4-hour window
+VIEW_M = 2500               # trips starting this close to an affected station are replayed
 WEATHER = ("MUFM", "MUWEA", "PUSIS", "PUTIS")
 LINE_NAMES = {"1": "Line 1 Yonge-University", "2": "Line 2 Bloor-Danforth", "4": "Line 4 Sheppard"}
 
@@ -71,6 +75,13 @@ def shape_event(rows, control_days):
         "total_normal_high": [max(totals[d][i] for d in control_days) for i in range(len(K))],
         "normal_days": nc,
     }
+
+
+def pick_normal_day(day_totals):
+    """day_totals: {day_offset: trips within 1 km}. The normal day closest to the average of all of them;
+    ties go to the nearest week, then the earlier one. Fixed in advance so the shown day is not cherry-picked."""
+    mean = sum(day_totals.values()) / len(day_totals)
+    return min(day_totals, key=lambda d: (abs(day_totals[d] - mean), abs(d), d))
 
 
 def shoreline(cells, w, window=9):
@@ -160,7 +171,7 @@ def event_counts(con, ev):
           and 2 * 6371000 * asin(sqrt(pow(sin(radians(b.lat - ss.lat) / 2), 2)
               + cos(radians(ss.lat)) * cos(radians(b.lat)) * pow(sin(radians(b.lon - ss.lon) / 2), 2))) <= 1000""",
         [ev["affected"]]).fetchall()
-    ids = [s for (s,) in near]
+    ids = sorted(s for (s,) in near)
     for d in [0] + ev["control_days"]:
         start = ev["t0"] + timedelta(days=d, minutes=15 * K[0])
         for k, s, n in con.execute(f"""
@@ -169,6 +180,32 @@ def event_counts(con, ev):
                 group by all""", [start, start, start + timedelta(minutes=15 * len(K)), ids]).fetchall():
             out.append((d, k, s, n))
     return ids, out
+
+
+def within(con, stations, metres):
+    return [s for (s,) in con.execute("""
+        select distinct b.station_id from bike_stations b, subway_stations ss
+        where ss.station in (select unnest(?))
+          and 2 * 6371000 * asin(sqrt(pow(sin(radians(b.lat - ss.lat) / 2), 2)
+              + cos(radians(ss.lat)) * cos(radians(b.lat)) * pow(sin(radians(b.lon - ss.lon) / 2), 2))) <= ?""",
+        [stations, metres]).fetchall()]
+
+
+def day_trips(con, ev, d, view_ids, near_ids):
+    """[seconds after window start, duration s, start id, end id or None, 1 if it started within 1 km]."""
+    start = ev["t0"] + timedelta(days=d, minutes=15 * K[0])
+    near = set(near_ids)
+    return [[t, dur, s, e, int(s in near)] for t, dur, s, e in con.execute("""
+        select datediff('second', ?::timestamp, start_time), duration_s, start_station_id, end_station_id
+        from trips where start_time >= ? and start_time < ? and start_station_id in (select unnest(?))
+        order by start_time""", [start, start, start + timedelta(minutes=15 * len(K)), view_ids]).fetchall()]
+
+
+def first_hour(con, ev, d, near_ids):
+    """Trips started within 1 km in the hour after the delay was logged, d days away."""
+    at = ev["at"] + timedelta(days=d)
+    return con.execute("""select count(*) from trips where start_time >= ? and start_time < ?
+                          and start_station_id in (select unnest(?))""", [at, at + timedelta(hours=1), near_ids]).fetchone()[0]
 
 
 def main():
@@ -201,19 +238,25 @@ def main():
         shaped = shape_event(rows, ev["control_days"])
         if sum(shaped["total_normal"]) < MIN_NORMAL_TRIPS:   # bike stations too new or too quiet to show anything
             continue
-        missing = sorted(set(ids) - set(shaped["stations"]))   # near but no trips at all in any window: show as zeros
-        shaped["stations"] += missing
-        shaped["actual"] += [[0] * len(K)] * len(missing)
-        shaped["normal"] += [[0] * len(K)] * len(missing)
+        for key in ("stations", "actual", "normal"):   # per-station detail is not shown any more
+            del shaped[key]
+        totals = {d: sum(n for dd, _, _, n in rows if dd == d) for d in ev["control_days"]}
+        nd = pick_normal_day(totals)
+        view = within(con, ev["affected"], VIEW_M)
         events.append({
             "id": ev["delay_id"], "when": ev["at"].isoformat(timespec="minutes"),
             "slot0": ev["t0"].isoformat(timespec="minutes"), "line": ev["line"],
             "from": ev["station"], "to": ev["station_to"], "min_delay": ev["min_delay"],
-            "code": ev["code"], "cause": ev["cause"], "affected": ev["affected"], **shaped,
+            "code": ev["code"], "cause": ev["cause"], "affected": ev["affected"], "near": ids, **shaped,
+            "normal_offset": nd, "normal_date": (ev["at"] + timedelta(days=nd)).date().isoformat(),
+            "first_hour": first_hour(con, ev, 0, ids),
+            "first_hour_normal": {str(d): first_hour(con, ev, d, ids) for d in ev["control_days"]},
+            "trips": day_trips(con, ev, 0, view, ids), "trips_normal": day_trips(con, ev, nd, view, ids),
         })
         print(f"{ev['at']:%Y-%m-%d %H:%M} line {ev['line']} {ev['station']} to {ev['station_to']}: {ev['min_delay']} min, "
-              f"{len(shaped['stations'])} bike stations, {shaped['normal_days']} normal days, "
-              f"first hour {sum(shaped['total_actual'][4:8])} trips vs {sum(shaped['total_normal'][4:8]):.1f} normal")
+              f"{len(ids)} bike stations, {shaped['normal_days']} normal days, first hour after {events[-1]['first_hour']} trips, "
+              f"shown normal day {events[-1]['normal_date']} {events[-1]['first_hour_normal'][str(nd)]}, "
+              f"all normal days {sorted(events[-1]['first_hour_normal'].values())}")
         if len(events) == N_EVENTS:
             break
 
