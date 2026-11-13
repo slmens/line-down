@@ -1,6 +1,14 @@
 # Line Down
 
+[![tests](https://github.com/slmens/line-down/actions/workflows/tests.yml/badge.svg)](https://github.com/slmens/line-down/actions/workflows/tests.yml) [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Watches Toronto's transport network and measures what happens when part of it fails. The core case: when a subway line goes down, where do people go, and can it be predicted as it happens?
+
+![Extra Bike Share trips near a stopped subway station, by minutes after the delay](analysis/output/effect_over_time.png)
+
+[![Pixel map: 80 bike trips within 1 km of Bloor-Yonge in the hour after a subway stop, against 51 on a normal Tuesday](docs/map.png)](https://slmens.github.io/line-down/)
+
+*Above: the effect over time, and the [pixel map](https://slmens.github.io/line-down/) replaying one real disruption next to a normal day.*
 
 ## The finding
 
@@ -70,3 +78,13 @@ Later phase:
 - **Highways and traffic cameras**, attached to the same pipeline.
 
 Known limits: the map's single-day replays have no citywide control (the averaged finding does, so a single day can be partly chance); walk-or-wait assumes bikes are available until dock history exists; the data fits on one machine, so nothing here is tested at scale.
+
+## Data credit and licence
+
+Code: [MIT](LICENSE). The data is not ours and is not in this repository; the pipeline downloads it.
+
+- **Subway delays, station locations (GTFS):** Toronto Transit Commission (TTC), published on [Toronto Open Data](https://open.toronto.ca) under the Open Government Licence – Toronto.
+- **Bike Share trips:** Bike Share Toronto, published on Toronto Open Data.
+- **Live feeds:** TTC alerts (`alerts.ttc.ca`) and the Bike Share Toronto GBFS feed. Dock-level history is our own snapshots of that feed.
+
+Not affiliated with or endorsed by the City of Toronto, the TTC or Bike Share Toronto. Check each publisher's current terms before reusing their data.

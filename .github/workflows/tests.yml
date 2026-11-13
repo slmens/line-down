@@ -1,0 +1,12 @@
+name: tests
+on: [push, pull_request]
+jobs:
+  unittest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9" # same as the macOS system Python the collectors run on
+      # Collector tests only: warehouse tests skip without DuckDB and the data/ files.
+      - run: python -m unittest
