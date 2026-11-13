@@ -2,7 +2,7 @@ name: tests
 on: [push, pull_request]
 jobs:
   unittest:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # 3.9 builds are not published for newer images
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
