@@ -27,7 +27,7 @@ Watches Toronto's transport network and measures what happens when part of it fa
 | Walk-or-wait advisor | Beats always-wait, always-bike and always-walk on held-out 2022 | [WALK_OR_WAIT.md](models/WALK_OR_WAIT.md) |
 | Incident brief agent | A short brief for each live disruption; every number checked against our own facts (18 of 18 faithful so far) | [AGENT.md](agent/AGENT.md) |
 | Pixel map | Replays real disruptions next to a normal day, trip by trip | `map/` |
-| Dashboards | Tableau Public, from CSV extracts | [TABLEAU.md](bi/TABLEAU.md) |
+| Dashboards | Tableau Public, from CSV extracts: [the finding dashboard](https://public.tableau.com/app/profile/selim.agca/viz/LineDownwhenthesubwaystops/Dashboard1) is up; three more to build | [TABLEAU.md](bi/TABLEAU.md) |
 
 ## How it fits together
 
@@ -71,7 +71,7 @@ Waiting on data (live collection began 2026-11-10):
 
 Waiting on hands:
 
-- **Tableau dashboards**: the extracts and the design are ready ([bi/TABLEAU.md](bi/TABLEAU.md)); the four dashboards still need building and publishing, and their link added here.
+- **Tableau dashboards**: dashboard 1 (the finding) is [published](https://public.tableau.com/app/profile/selim.agca/viz/LineDownwhenthesubwaystops/Dashboard1); the delay explorer, agent scorecard and live docks dashboards are designed in [bi/TABLEAU.md](bi/TABLEAU.md) but not built yet.
 
 Later phase:
 

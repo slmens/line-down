@@ -4,7 +4,9 @@
 
 Tableau Public saves only to the web, so the workbook lives on the public profile, not in this repo. To refresh: open it in Tableau Public, **Data → Refresh All Extracts**, then **File → Save to Tableau Public**. Everything here is open city data plus our own dock snapshots, so public is fine.
 
-Published: *(add the URL here once it's up)*
+Published: dashboard 1, the finding: https://public.tableau.com/app/profile/selim.agca/viz/LineDownwhenthesubwaystops/Dashboard1
+
+Build notes for dashboard 1: sheet `First hour` uses a calculated field `Range = [Hi] - [Lo]` (Gantt bar from `Lo` sized by `Range`, dual axis with `Lift` as a dot, axes synchronized); its axis and the `By group` axis are fixed ranges (0 to 0.2, and -0.1 to 0.7) because Tableau sizes a Gantt axis from the bar start, which hides the upper end of the range. Recheck the fixed ranges after a refresh if a `hi` goes past them.
 
 ## Honesty rules (from CLAUDE.md principles)
 
