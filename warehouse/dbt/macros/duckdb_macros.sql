@@ -1,3 +1,4 @@
+{% macro create_duckdb_macros() %}
 -- Parsing helpers shared by the core tables (and by tests).
 
 -- Excel day-number (e.g. 42606.5673) to timestamp, rounded to the second.
@@ -50,3 +51,4 @@ create or replace macro subway_line(x) as case regexp_replace(upper(coalesce(x, 
     when '' then null
     else case when x like '%/%' then 'multi' end
     end;
+{% endmacro %}

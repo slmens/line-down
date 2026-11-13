@@ -1,0 +1,8 @@
+# No secrets: the only setting is the DuckDB file, which build.py points at its temporary build file.
+linedown:
+  target: build
+  outputs:
+    build:
+      type: duckdb
+      path: "{{ env_var('LINEDOWN_DB', '../../data/warehouse/linedown.duckdb') }}"
+      threads: 1  # models run one at a time like the old SQL files; DuckDB parallelises inside each

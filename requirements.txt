@@ -2,3 +2,7 @@ duckdb==2.0.0
 numpy==2.5.4
 matplotlib==3.11.2
 scikit-learn==1.9.1
+dbt-duckdb==1.11.1
+dagster==1.13.30
+dagster-webserver==1.13.30
+dagster-dbt==0.29.30

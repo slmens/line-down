@@ -1,0 +1,28 @@
+# Core warehouse tables, built by dbt from the all-text staging tables that warehouse/build.py
+# loads from data/raw. Run through build.py (it stages, runs dbt, checks, then swaps the file in).
+name: linedown
+version: "1.0"
+profile: linedown
+config-version: 2
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+target-path: target
+clean-targets: [target, logs]
+
+# The parsing helpers are DuckDB macros (also used by tests), created before any model runs.
+on-run-start:
+  - "{{ create_duckdb_macros() }}"
+
+models:
+  linedown:
+    +materialized: table
+    intermediate:
+      +tags: [intermediate]  # dropped from the published warehouse by build.py
+
+seeds:
+  linedown:
+    station_aliases:
+      +column_types: {key: varchar, station: varchar, why: varchar}

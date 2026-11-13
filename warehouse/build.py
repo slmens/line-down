@@ -3,10 +3,13 @@
 Usage:
     .venv/bin/python warehouse/build.py            build data/warehouse/linedown.duckdb
     .venv/bin/python warehouse/build.py --twice    build twice and fail unless identical
+    --cutoff <unix seconds>                        include live snapshots up to then (default: now)
 
-data/raw is only read. The history zips are unpacked to data/warehouse/build/ as
-clean UTF-8 (deleted afterwards), loaded as all-text staging tables, then
-warehouse/sql/*.sql runs in order to make the core tables, then the checks run.
+data/raw is only read. Three steps, each also run on its own by Dagster (orchestration/):
+  stage      the history zips are unpacked to data/warehouse/build/ as clean UTF-8 (deleted
+             afterwards) and loaded with the live snapshots as all-text staging tables
+  transform  dbt (warehouse/dbt/) builds the core tables from them and runs its tests
+  publish    the checks run, staging is dropped, and the new database replaces the old one
 The new database replaces the old one only if every step and check passed.
 """
 import codecs
@@ -14,6 +17,7 @@ import io
 import os
 import re
 import shutil
+import subprocess
 import sys
 import time
 import zipfile
@@ -26,8 +30,8 @@ RAW = ROOT / "data" / "raw"
 OUT = ROOT / "data" / "warehouse"
 DB = OUT / "linedown.duckdb"
 WORK = OUT / "build"
-SQL = Path(__file__).resolve().parent / "sql"
-SEEDS = Path(__file__).resolve().parent / "seeds"
+TMP = OUT / "linedown.duckdb.tmp"
+DBT = Path(__file__).resolve().parent / "dbt"
 
 # normalised header -> standard column. Anything else in a trip file stops the build.
 TRIP_COLUMNS = {
@@ -195,13 +199,18 @@ def load_live(con, cutoff):
     con.execute(f"create table bike_station_info as select * from read_json({lit(infos[-1])})")
     ts = "cast(regexp_extract(filename, '(\\d+)\\.json\\.gz$', 1) as bigint)"
     status = RAW / "bikeshare" / "station_status" / "*" / "*.json.gz"
+    # Only the fields dock_status uses, with the types DuckDB used to infer: the full snapshots
+    # (per-dock vehicle lists) ran out of memory at ~5,600 files.
     # shortcut: rescans every snapshot on each build; make it incremental once builds get slow.
+    counts = ", ".join(f"{c} BIGINT" for c in ("num_bikes_available", "num_bikes_disabled",
+                                               "num_docks_available", "num_docks_disabled"))
+    cols = {"last_updated": "BIGINT",
+            "data": f"STRUCT(stations STRUCT(station_id VARCHAR, {counts}, is_renting BOOLEAN, is_returning BOOLEAN)[])"}
     con.execute(f"""create table live_station_status as select last_updated, data
-        from read_json({lit(status)}, union_by_name=true, filename=true) where {ts} <= {cutoff}""")
+        from read_json({lit(status)}, columns={cols!r}, filename=true) where {ts} <= {cutoff}""")
     alerts = RAW / "ttc" / "live_alerts" / "*" / "*.json.gz"
     con.execute(f"""create table live_ttc_alerts as select {ts} as snapshot_ts, routes
         from read_json({lit(alerts)}, union_by_name=true, filename=true) where {ts} <= {cutoff}""")
-    con.execute(f"create table seed_station_aliases as select key, station from read_csv({lit(SEEDS / 'station_aliases.csv')}, header=true)")
 
 
 def checks(con):
@@ -209,7 +218,7 @@ def checks(con):
     fails = []
     q = lambda sql: con.execute(sql).fetchall()  # noqa: E731
 
-    rejected = q("select s.file_path, count(*) from reject_errors e join reject_scans s using (scan_id) group by 1 order by 1")
+    rejected = q("select * from stg_rejects order by 1")
     for f, n in rejected:
         print(f"  rejected rows (malformed CSV): {n:>7,}  {Path(f).name}")
 
@@ -280,42 +289,78 @@ def fingerprint(con):
     return {t: con.execute(f"select count(*), sum(hash(x)::hugeint) from {t} x").fetchone() for t in CORE}
 
 
-def build(cutoff):
+STAGING = ["stg_trips", "stg_delays", "stg_delay_codes", "stg_rejects", "gtfs_routes", "gtfs_trips",
+           "gtfs_stop_times", "gtfs_stops", "bike_station_info", "live_station_status", "live_ttc_alerts"]
+
+
+def stage(cutoff, log=print):
+    """Load data/raw into a fresh TMP database as all-text staging tables."""
     started = time.time()
     shutil.rmtree(WORK, ignore_errors=True)
     WORK.mkdir(parents=True)
-    tmp = OUT / "linedown.duckdb.tmp"
-    tmp.unlink(missing_ok=True)
-    con = duckdb.connect(str(tmp))
+    TMP.unlink(missing_ok=True)
+    con = duckdb.connect(str(TMP))
     try:
         con.execute("load excel")
         for step in (load_trips, load_delays, load_gtfs, load_live):
-            print(f"[{time.time() - started:5.0f}s] {step.__name__}", flush=True)
+            log(f"[{time.time() - started:5.0f}s] {step.__name__}")
             step(con, cutoff) if step is load_live else step(con)
-        for f in sorted(SQL.glob("*.sql")):
-            print(f"[{time.time() - started:5.0f}s] {f.name}", flush=True)
-            con.execute(f.read_text())
+        # malformed CSV rows: kept as a table because DuckDB's reject tables end with this connection
+        con.execute("""create table stg_rejects as select s.file_path, count(*) as n
+            from reject_errors e join reject_scans s using (scan_id) group by 1""")
+        con.close()
+    except BaseException:
+        con.close()
+        TMP.unlink(missing_ok=True)
+        raise
+    finally:
+        shutil.rmtree(WORK, ignore_errors=True)
+
+
+def transform(select=None):
+    """dbt build (seeds, models, tests) against TMP. Our connection is closed: DuckDB allows one writer.
+    A separate process, not dbt's Python API: dbt-duckdb keeps the file open for the life of the
+    process, and after the swap that handle would point at the published warehouse."""
+    dbt = Path(sys.executable).parent / "dbt"
+    args = [str(dbt), "build", "--project-dir", str(DBT), "--profiles-dir", str(DBT)] + (["--select", select] if select else [])
+    if subprocess.run(args, env={**os.environ, "LINEDOWN_DB": str(TMP)}).returncode != 0:
+        TMP.unlink(missing_ok=True)
+        raise RuntimeError("dbt build failed: see the dbt output above")
+
+
+def publish(log=print):
+    """Run the checks on TMP, drop staging and intermediate tables, then swap it in as DB."""
+    con = duckdb.connect(str(TMP))
+    try:
         fails = checks(con)
         if fails:
             raise RuntimeError("checks failed:\n  " + "\n  ".join(fails))
-        for t in ("stg_trips", "stg_delays", "stg_delay_codes", "gtfs_routes", "gtfs_trips", "gtfs_stop_times",
-                  "gtfs_stops", "bike_station_info", "live_station_status", "live_ttc_alerts"):
+        intermediate = [r[0] for r in con.execute(
+            "select table_name from duckdb_tables() where table_name like 'int\\_%' escape '\\'").fetchall()]
+        for t in STAGING + intermediate:
             con.execute(f"drop table {t}")  # staging copies of raw are not part of the warehouse
         fp = fingerprint(con)
         con.close()
     except BaseException:
         con.close()
-        tmp.unlink(missing_ok=True)
+        TMP.unlink(missing_ok=True)
         raise
-    finally:
-        shutil.rmtree(WORK, ignore_errors=True)
-    os.replace(tmp, DB)
-    print(f"\nbuilt {DB.relative_to(ROOT)} in {time.time() - started:.0f}s")
+    os.replace(TMP, DB)
+    log(f"\nbuilt {DB.relative_to(ROOT)}")
+    return fp
+
+
+def build(cutoff):
+    started = time.time()
+    stage(cutoff)
+    transform()
+    fp = publish()
+    print(f"in {time.time() - started:.0f}s")
     return fp
 
 
 if __name__ == "__main__":
-    cutoff = int(time.time())
+    cutoff = int(sys.argv[sys.argv.index("--cutoff") + 1]) if "--cutoff" in sys.argv else int(time.time())
     first = build(cutoff)
     if "--twice" in sys.argv:
         second = build(cutoff)

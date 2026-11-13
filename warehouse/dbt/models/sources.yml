@@ -1,0 +1,17 @@
+version: 2
+
+sources:
+  - name: staging
+    description: All-text copies of data/raw, loaded by warehouse/build.py (unzip, encoding repair, header mapping) and dropped after the build.
+    schema: main
+    tables:
+      - name: stg_trips
+      - name: stg_delays
+      - name: stg_delay_codes
+      - name: gtfs_routes
+      - name: gtfs_trips
+      - name: gtfs_stop_times
+      - name: gtfs_stops
+      - name: bike_station_info
+      - name: live_station_status
+      - name: live_ttc_alerts

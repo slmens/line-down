@@ -1,0 +1,7 @@
+# Copied into DAGSTER_HOME (data/dagster/) by collectors/install_launchd.sh.
+# One run at a time: every warehouse run writes the same temporary DuckDB file.
+concurrency:
+  runs:
+    max_concurrent_runs: 1
+telemetry:
+  enabled: false

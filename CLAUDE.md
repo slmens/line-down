@@ -8,7 +8,9 @@ Watches Toronto's transport network and measures what happens when part of it fa
 |--------|-------|
 | `collectors/` | Live feeds: TTC alerts, bike share |
 | `pipelines/` | Historical loads and transforms |
-| `warehouse/` | Schemas and SQL |
+| `warehouse/` | Staging loader (`build.py`) and the dbt project (`dbt/`) |
+| `orchestration/` | Dagster: the pipeline as assets, schedules |
+| `bi/` | Tableau Public extracts and dashboard guide |
 | `analysis/` | The disruption finding |
 | `models/` | Delay and dock predictions |
 | `agent/` | Incident briefs |
@@ -29,7 +31,8 @@ Watches Toronto's transport network and measures what happens when part of it fa
 - Tests: `unittest` (stdlib).
 - Collectors and download pipeline stay on `/usr/bin/python3` 3.9, stdlib only.
 - Warehouse: DuckDB pinned in `requirements.txt` (2.0.0 needs Python >= 3.11), in `.venv/` on Python 3.12 via uv at `~/.local/bin/uv`. Created 2026-11-10 (Python 3.12.16). DuckDB's `excel` extension is fetched once from the official DuckDB repository (signature-checked) into `~/.duckdb/extensions/`.
-- Runs on a Mac mini under launchd.
+- Transforms: dbt (dbt-duckdb) in `warehouse/dbt/`; orchestration: Dagster (`orchestration/`); dashboards: Tableau Public from CSV extracts. All in `.venv`, pinned in `requirements.txt`.
+- Runs on a Mac mini under launchd (collectors, brief agent, and the Dagster daemon and UI).
 
 ## Commands
 
@@ -38,14 +41,17 @@ Watches Toronto's transport network and measures what happens when part of it fa
 - Delay-length model: `.venv/bin/python models/delay_length.py` (write-up in `models/DELAY_LENGTH.md`)
 - Walk-or-wait advisor: `.venv/bin/python models/walk_or_wait.py` (scores it); add `"<station>" "<next station>" <code> <minutes>` for advice (write-up in `models/WALK_OR_WAIT.md`)
 - Pixel map: `.venv/bin/python map/export.py` (about 25 s, writes `map/data.js`), then open `map/index.html` in a browser (works from disk; or `python3 -m http.server 8765 -d map`)
-- Build the warehouse: `.venv/bin/python warehouse/build.py` (about 70 s, uses all cores; `--twice` also checks the rebuild is identical). Output `data/warehouse/linedown.duckdb`
+- Build the warehouse: `.venv/bin/python warehouse/build.py` (about 75 s, uses all cores; stages raw data, runs `dbt build`, checks, swaps in; `--twice` also checks the rebuild is identical; `--cutoff <unix s>` fixes the live-data cutoff). Output `data/warehouse/linedown.duckdb`
+- dbt on its own (after a build left the staging file, or for docs): `cd warehouse/dbt && LINEDOWN_DB=<file> ../../.venv/bin/dbt <build|docs generate|docs serve> --profiles-dir .`
+- Pipeline UI: http://127.0.0.1:3000 (launchd keeps it up); by hand: `DAGSTER_HOME=$PWD/data/dagster .venv/bin/dagster dev -f orchestration/definitions.py`. Jobs: `weekly_refresh` (Sun 04:00), `daily_live` (Mon-Sat 05:00)
+- Tableau extracts: `.venv/bin/python bi/export_extracts.py` (writes `data/exports/*.csv`; dashboards described in `bi/TABLEAU.md`)
 - One bike share snapshot: `python3 collectors/bikeshare.py station_status`
 - One TTC alerts snapshot: `python3 collectors/ttc.py`
 - Check for stopped collectors: `python3 collectors/check_fresh.py` (also pings the URL in `data/heartbeat_url`, if present, when all feeds are fresh)
-- Download or refresh history: `python3 pipelines/download_history.py` (re-runnable; skips what it has; launchd runs it weekly)
+- Download or refresh history: `python3 pipelines/download_history.py` (re-runnable; skips what it has; Dagster's `weekly_refresh` runs it)
 - Create warehouse venv: `~/.local/bin/uv python install 3.12 && { [ -d .venv ] || ~/.local/bin/uv venv --python 3.12 .venv; } && ~/.local/bin/uv pip install --python .venv/bin/python -r requirements.txt`
 - Run warehouse code: `.venv/bin/python <script>`
-- Start collectors and the brief agent on this Mac: `sh collectors/install_launchd.sh` (logs in `data/logs/`)
+- Start collectors, the brief agent and Dagster on this Mac: `sh collectors/install_launchd.sh` (logs in `data/logs/`)
 - Incident briefs: `.venv/bin/python agent/brief.py` (launchd runs it every minute; needs `data/openrouter_api_key`); score with `.venv/bin/python agent/brief.py score` (write-up in `agent/AGENT.md`)
 
 ## Decisions
@@ -59,7 +65,7 @@ Add one line per decision that code alone would not explain, with the date.
 - 2026-11-10: All downloads go through `collectors/common.py`: HTTPS only, certificates verified, no redirects to another host, 10 MB cap, shape checked before saving. Downloads are never executed.
 - 2026-11-10: Each feed folder has a `LAST` file touched on every successful run; `check_fresh.py` (every 5 min) sends a macOS notification when one is too old.
 - 2026-11-10: History comes from Toronto Open Data (CKAN) datasets `ttc-subway-delay-data`, `bike-share-toronto-ridership-data` and `ttc-routes-and-schedules` (GTFS, for subway station locations), saved untouched under `data/raw/history/<dataset>/<last-modified date>/`. Only CSV/XLSX/ZIP are kept (XML/JSON are copies). Each file is checked against the server Content-Length (the portal listing sizes are stale for some files) and zip CRCs verified; nothing is unzipped on disk.
-- 2026-11-10: Warehouse = one DuckDB file rebuilt from scratch by `warehouse/build.py`: zips unpacked to a scratch dir as UTF-8, all-text staging, then `warehouse/sql/*.sql` in order. File quirks are in `warehouse/SOURCES.md`.
+- 2026-11-10: Warehouse = one DuckDB file rebuilt from scratch by `warehouse/build.py`: zips unpacked to a scratch dir as UTF-8, all-text staging, then the core tables in SQL (dbt since 2026-11-12). File quirks are in `warehouse/SOURCES.md`.
 - 2026-11-10: All warehouse times are Toronto local time (history is published that way; live UTC is converted).
 - 2026-11-10: Delay station text is matched to GTFS stations by key cleaning + `warehouse/seeds/station_aliases.csv` + unique prefix (among the delay's own line's stations when the line is known); line names and Scarborough RT stations stay unmatched (~9% of rows, 1.5% of 10+ min delays on Lines 1/2/4). Bloor and Yonge are merged into Bloor-Yonge.
 - 2026-11-10: A delay "X TO Y" means the whole stretch was affected: `subway_delays.station`/`station_to` hold the ends (both must be on the delay's line) and `delay_stations` lists every station between them, using `line_stations` order from GTFS.
@@ -70,6 +76,10 @@ Add one line per decision that code alone would not explain, with the date.
 - 2026-11-11: Walk-or-wait rule uses real median Bike Share ride times between the docks (54 of 142 routes have 20+ trips; others 15 km/h). Built on 2014-2021, scored on 2022 (beats always wait/bike/walk at 5/10/15 min). Test years spent so far: 2022, 2023-2024, 2025-2026. Assumes bikes are available until live dock history exists.
 - 2026-11-11: Pixel map v1 replays history only (no live layer yet): the 8 longest non-weather delays since 2023 (one per day, 10+ bike stations and 20+ normal trips within 1 km), replayed as two maps on one clock: every real trip starting within 2.5 km, drawn as a straight line dock to dock, on the day and on one normal day (same weekday and time ±1-4 weeks, no delay on the line) picked by a fixed rule: trip count closest to the average of all normal days. Headline and counters count trips started within 1 km in the hour after the delay. No citywide control per event, so the page says one day can be partly chance and quotes the averaged finding. Drawn only from our own data, no map tiles: subway lines from GTFS shapes, Lake Ontario's shore traced as the smoothed southern edge of all bus/streetcar shapes; turned 17° so Yonge runs straight up. Pixel art at 2 device pixels per art pixel, each colour snapped on/off (no blur).
 - 2026-11-11: Brief agent = facts computed by our code, frozen at alert time, then one Claude call to word them (no tool loop): every number is checkable. Faithfulness = every number in the brief appears in the facts. Runs on `.venv` Python; Claude via OpenRouter (stdlib HTTP, no SDK), key from `data/openrouter_api_key` because launchd has no shell env.
+- 2026-11-12: dbt builds the core tables (same names, so every consumer is unchanged; the port's 11 core-table fingerprints match the old SQL). Python still does the staging dbt can't (unzip, encoding repair, header mapping, xlsx); the DuckDB parsing macros run as dbt's `on-run-start`. dbt builds into build.py's temporary file so the swap stays atomic; `int_*` models are intermediate and dropped from the published file. Duplicate trip ids only warn (they are in the city's files).
+- 2026-11-12: Live station_status is read with only the fields `dock_status` uses (types as DuckDB inferred them): the full snapshots ran out of memory (12.7 GB) at ~5,600 files.
+- 2026-11-12: Dagster over Airflow: asset lineage from raw files through every dbt model, and light enough for one Mac. One run at a time, in-process (every warehouse run shares the temporary file; 16 GB RAM). Collectors and the brief agent stay on launchd and system Python, so collection carries on if Dagster is down. The two models are assets but in no scheduled job: their test years are spent, and rescoring on new data would quietly change a published result.
+- 2026-11-12: Tableau Public, fed CSV extracts (it can't open DuckDB; workbooks live on the public profile, refreshed by hand). Fine to be public: open city data plus our own dock snapshots.
 
 ## Agent config
 

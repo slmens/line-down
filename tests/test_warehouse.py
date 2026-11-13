@@ -1,5 +1,7 @@
 """Warehouse parsing rules. Needs DuckDB: run with .venv/bin/python -m unittest (skipped on system Python)."""
 import io
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -14,6 +16,13 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "warehouse"))
+DBT = ROOT / "warehouse" / "dbt"
+
+
+def macros_sql():
+    """The DuckDB macros, without the dbt macro wrapper around them."""
+    lines = (DBT / "macros" / "duckdb_macros.sql").read_text().splitlines()
+    return "\n".join(l for l in lines if not l.startswith("{%"))
 
 
 @unittest.skipIf(duckdb is None, "duckdb not installed (use .venv/bin/python)")
@@ -21,7 +30,7 @@ class MacroTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.con = duckdb.connect()
-        cls.con.execute((ROOT / "warehouse" / "sql" / "00_macros.sql").read_text())
+        cls.con.execute(macros_sql())
 
     def one(self, sql, *params):
         return self.con.execute("select " + sql, list(params)).fetchone()[0]
@@ -68,19 +77,19 @@ class MacroTest(unittest.TestCase):
 
 @unittest.skipIf(duckdb is None, "duckdb not installed (use .venv/bin/python)")
 class DelayMatchingTest(unittest.TestCase):
-    """Runs the real 30_delays.sql on a toy Line 1 (Union - King - Queen) and Line 2 stretch."""
+    """Runs the real dbt delay models and alias seed on a toy Line 1 (Union - King - Queen) and Line 2 stretch."""
 
     @classmethod
     def setUpClass(cls):
-        c = cls.con = duckdb.connect()
-        c.execute((ROOT / "warehouse" / "sql" / "00_macros.sql").read_text())
+        cls.tmp = tempfile.TemporaryDirectory()
+        db = Path(cls.tmp.name) / "toy.duckdb"
+        c = duckdb.connect(str(db))
         c.execute("""
             create table line_stations as select * from (values
                 ('1', 1, 'Union Station'), ('1', 2, 'King Station'), ('1', 3, 'Queen Station'),
                 ('1', 4, 'Sheppard West Station'), ('1', 5, 'Sheppard-Yonge Station'),
                 ('2', 1, 'Kennedy Station'), ('2', 2, 'Victoria Park Station')) t(line, seq, station);
             create table subway_stations as select distinct station from line_stations;
-            create table seed_station_aliases as select * from (values ('SHEPPARD', 'Sheppard-Yonge Station')) t(key, station);
             create table stg_delay_codes as select 'MUIS' as "CODE", 'Ill customer' as "DESCRIPTION";
             create table stg_delays as select '45000' as date, '08:15' as time, null as day, station,
                 'MUIS' as code, '12' as min_delay, '15' as min_gap, 'N' as bound, line, null as vehicle,
@@ -94,7 +103,19 @@ class DelayMatchingTest(unittest.TestCase):
                 ('SHEPPARD STATION', 'YU')           -- alias
             ) t(station, line);
         """)
-        c.execute((ROOT / "warehouse" / "sql" / "30_delays.sql").read_text())
+        c.close()
+        delay_models = "station_aliases int_station_keys int_raw_texts int_text_match int_raw_station_match subway_delays delay_stations"
+        p = subprocess.run([str(Path(sys.executable).parent / "dbt"), "build", "--project-dir", str(DBT),
+                            "--profiles-dir", str(DBT), "--quiet", "--target-path", str(Path(cls.tmp.name) / "target"),
+                            "--select", delay_models, "--exclude", "resource_type:test"],
+                           env={**os.environ, "LINEDOWN_DB": str(db)}, capture_output=True, text=True)
+        assert p.returncode == 0, p.stdout + p.stderr
+        cls.con = duckdb.connect(str(db), read_only=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.con.close()
+        cls.tmp.cleanup()
 
     def test_stretches_and_singles(self):
         got = {r: (s, t) for r, s, t in self.con.execute("select station_raw, station, station_to from subway_delays").fetchall()}

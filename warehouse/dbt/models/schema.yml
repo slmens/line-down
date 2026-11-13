@@ -1,0 +1,67 @@
+version: 2
+
+# Core tables keep their pre-dbt names: analysis/, models/, map/ and agent/ read them directly.
+models:
+  - name: trips
+    description: One row per Bike Share trip, 2016 onward, Toronto local time.
+    columns:
+      - name: trip_id
+        tests:
+          # build.py reports duplicates but they are in the city's files, so they only warn
+          - unique: {config: {severity: warn}}
+      - name: start_time
+        tests: [not_null]
+  - name: subway_delays
+    description: One row per recorded subway delay, 2014 onward, station text matched to GTFS where possible.
+    columns:
+      - name: delay_id
+        tests: [unique, not_null]
+      - name: occurred_at
+        tests: [not_null]
+      - name: station
+        tests:
+          - relationships: {arguments: {to: "ref('subway_stations')", field: station}}
+  - name: delay_stations
+    description: Every station each delay affected (an "X TO Y" stretch expands to all stations between).
+    columns:
+      - name: delay_id
+        tests:
+          - not_null
+          - relationships: {arguments: {to: "ref('subway_delays')", field: delay_id}}
+      - name: station
+        tests:
+          - not_null
+          - relationships: {arguments: {to: "ref('subway_stations')", field: station}}
+  - name: delay_codes
+    columns:
+      - name: code
+        tests: [unique, not_null]
+  - name: subway_stations
+    description: One row per subway station (platforms grouped; Bloor and Yonge merged into Bloor-Yonge).
+    columns:
+      - name: station
+        tests: [unique, not_null]
+  - name: line_stations
+    description: Each line's stations in running order, from GTFS.
+    columns:
+      - name: station
+        tests:
+          - relationships: {arguments: {to: "ref('subway_stations')", field: station}}
+  - name: bike_stations
+    columns:
+      - name: station_id
+        tests: [unique, not_null]
+  - name: dock_snapshots
+    columns:
+      - name: observed_at
+        tests: [unique, not_null]
+  - name: dock_status
+    description: Bikes and free docks per station, one row per change, from the live collector.
+  - name: ttc_alerts
+    columns:
+      - name: alert_id
+        tests: [unique, not_null]
+  - name: mart_delays_monthly
+    description: Tableau delay explorer source.
+  - name: mart_dock_levels_hourly
+    description: Tableau live-docks source.
