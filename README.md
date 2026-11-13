@@ -14,7 +14,7 @@ Watches Toronto's transport network and measures what happens when part of it fa
 
 **When the subway stops, people walk to Bike Share, but only a few of them.** In the first hour after a 10+ minute subway delay, Bike Share trips starting within 250 m of the affected stations rise **+13.6%** (95% range +9.9% to +17.3%) above a normal day, fading to +7.5% at 250-500 m. That's about 0.7 extra trips per disruption next to the station. Bigger delays, bigger effect: +33% for 20-59 minute delays.
 
-3,777 delays, Feb 2023 to Aug 2026, difference-in-differences against matched normal days, with a fake-event placebo that stays flat. Full write-up: [analysis/FINDING.md](analysis/FINDING.md).
+3,777 delays, Feb 2023 to Aug 2026, difference-in-differences against matched normal days, with a fake-event placebo that shows no spike (a small steady −2 to −3% offset, explained in the write-up). Full write-up: [analysis/FINDING.md](analysis/FINDING.md).
 
 ## What's in it
 
@@ -63,15 +63,23 @@ Every command is listed in [CLAUDE.md](CLAUDE.md#commands).
 
 ## Not done yet
 
-Waiting on data (live collection began 2026-11-10):
+Waiting on data (live collection began 2026-11-10; planned return early-to-mid December 2026). First check the collectors ran unattended: `python3 collectors/check_fresh.py`, `data/logs/`, Dagster runs, and gaps in `dock_snapshots`.
 
 - **Dock predictions**: which docks near a disruption will run empty. Needs a few weeks of live dock history to train and test on.
 - **Live layer on the map**: today's disruptions and dock levels, not only past replays. Needs the same live history.
-- **Agent accuracy over a real sample**: 18 incidents is too few to judge its length estimate; rescore after a few weeks (`agent/brief.py score`), and measure how alert duration differs from delay-log length.
+- **Agent accuracy over a real sample**: 18 incidents is too few to judge its length estimate; rescore after a few weeks (`agent/brief.py score`, then update `agent/AGENT.md`), and measure how alert duration differs from delay-log length.
 
-Waiting on hands:
+Waiting on hands (Tableau Public, built by hand in the desktop app):
 
-- **Tableau dashboards**: dashboard 1 (the finding) is [published](https://public.tableau.com/app/profile/selim.agca/viz/LineDownwhenthesubwaystops/Dashboard1); the delay explorer, agent scorecard and live docks dashboards are designed in [bi/TABLEAU.md](bi/TABLEAU.md) but not built yet.
+- **Dashboard 1, the finding**: [published](https://public.tableau.com/app/profile/selim.agca/viz/LineDownwhenthesubwaystops/Dashboard1).
+- **Dashboard 2, delay explorer**: designed in [bi/TABLEAU.md](bi/TABLEAU.md), not built.
+- **Dashboard 3, agent scorecard**: not built; better after the larger agent sample above.
+- **Dashboard 4, live docks**: not built; better after a few weeks of dock history. Re-run `bi/export_extracts.py` first.
+- After any refresh, recheck the fixed axis ranges on dashboard 1 (see the build notes in `bi/TABLEAU.md`).
+
+Open checks:
+
+- **Live-feed terms**: the licences of the TTC alerts API and the Bike Share GBFS feed are not confirmed (the three Toronto Open Data datasets are Open Government Licence – Toronto).
 
 Later phase:
 
