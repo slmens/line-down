@@ -45,7 +45,8 @@ Watches Toronto's transport network and measures what happens when part of it fa
 - Download or refresh history: `python3 pipelines/download_history.py` (re-runnable; skips what it has; launchd runs it weekly)
 - Create warehouse venv: `~/.local/bin/uv python install 3.12 && { [ -d .venv ] || ~/.local/bin/uv venv --python 3.12 .venv; } && ~/.local/bin/uv pip install --python .venv/bin/python -r requirements.txt`
 - Run warehouse code: `.venv/bin/python <script>`
-- Start collectors on this Mac: `sh collectors/install_launchd.sh` (logs in `data/logs/`)
+- Start collectors and the brief agent on this Mac: `sh collectors/install_launchd.sh` (logs in `data/logs/`)
+- Incident briefs: `.venv/bin/python agent/brief.py` (launchd runs it every minute; needs `data/openrouter_api_key`); score with `.venv/bin/python agent/brief.py score` (write-up in `agent/AGENT.md`)
 
 ## Decisions
 
@@ -68,6 +69,7 @@ Add one line per decision that code alone would not explain, with the date.
 - 2026-11-11: Delay-length model scored once on held-out 2025-2026: MAE 3.88 vs 4.01 for the per-cause-code median baseline; no gain for 20+ min warnings. 2025-2026 is now spent as a test set; tune any new model on other years. scikit-learn pinned.
 - 2026-11-11: Walk-or-wait rule uses real median Bike Share ride times between the docks (54 of 142 routes have 20+ trips; others 15 km/h). Built on 2014-2021, scored on 2022 (beats always wait/bike/walk at 5/10/15 min). Test years spent so far: 2022, 2023-2024, 2025-2026. Assumes bikes are available until live dock history exists.
 - 2026-11-11: Pixel map v1 replays history only (no live layer yet): the 8 longest non-weather delays since 2023 (one per day, 10+ bike stations and 20+ normal trips within 1 km), replayed as two maps on one clock: every real trip starting within 2.5 km, drawn as a straight line dock to dock, on the day and on one normal day (same weekday and time ±1-4 weeks, no delay on the line) picked by a fixed rule: trip count closest to the average of all normal days. Headline and counters count trips started within 1 km in the hour after the delay. No citywide control per event, so the page says one day can be partly chance and quotes the averaged finding. Drawn only from our own data, no map tiles: subway lines from GTFS shapes, Lake Ontario's shore traced as the smoothed southern edge of all bus/streetcar shapes; turned 17° so Yonge runs straight up. Pixel art at 2 device pixels per art pixel, each colour snapped on/off (no blur).
+- 2026-11-11: Brief agent = facts computed by our code, frozen at alert time, then one Claude call to word them (no tool loop): every number is checkable. Faithfulness = every number in the brief appears in the facts. Runs on `.venv` Python; Claude via OpenRouter (stdlib HTTP, no SDK), key from `data/openrouter_api_key` because launchd has no shell env.
 
 ## Agent config
 

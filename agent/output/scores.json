@@ -1,0 +1,13 @@
+{
+ "incidents": 18,
+ "cleared": 18,
+ "briefs_written": 18,
+ "length": {
+  "mean_abs_error_minutes": 12.8,
+  "baseline_all_causes_mean_abs_error_minutes": 12.7,
+  "share_within_8_in_10_bound": 0.72,
+  "median_actual_minutes": 6.5
+ },
+ "faithful_share": 1,
+ "unfaithful": {}
+}

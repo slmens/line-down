@@ -6,6 +6,7 @@ set -eu
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 LOGS="$REPO/data/logs"
 AGENTS="$HOME/Library/LaunchAgents"
+PYTHON=/usr/bin/python3  # collectors stay on system Python, stdlib only
 mkdir -p "$LOGS" "$AGENTS"
 
 install_job() { # name interval_seconds script_path [arg]
@@ -21,7 +22,7 @@ install_job() { # name interval_seconds script_path [arg]
   <key>Label</key><string>$label</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/bin/python3</string>
+    <string>$PYTHON</string>
     <string>$REPO/$3</string>
     $arg
   </array>
@@ -44,3 +45,5 @@ install_job bikeshare-info 3600 collectors/bikeshare.py station_information  # s
 install_job ttc-alerts 30 collectors/ttc.py
 install_job check-fresh 300 collectors/check_fresh.py
 install_job download-history 604800 pipelines/download_history.py  # weekly; city publishes monthly
+PYTHON="$REPO/.venv/bin/python"  # the agent needs DuckDB
+install_job agent-brief 60 agent/brief.py
