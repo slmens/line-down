@@ -93,8 +93,6 @@ def map_data(context):
     run(context, VENV_PYTHON, "map/export.py")
 
 
-# Models are materialized by hand only: their held-out test years are spent, and re-scoring on
-# a schedule would quietly change a published result (see CLAUDE.md decisions).
 @dg.asset(group_name="models", deps=[warehouse], description="Delay-length model, scored once on 2025-2026.")
 def delay_length_model(context):
     run(context, VENV_PYTHON, "models/delay_length.py")
@@ -111,10 +109,13 @@ def tableau_extracts(context):
     run(context, VENV_PYTHON, "bi/export_extracts.py")
 
 
-models = dg.AssetSelection.assets(delay_length_model, walk_or_wait_model)
+# Published results are rerun by hand, on purpose: the models (test years spent) and the finding
+# and map, whose committed outputs match analysis/FINDING.md. A schedule rewriting them would
+# leave the repo disagreeing with its own write-ups.
+published = dg.AssetSelection.assets(delay_length_model, walk_or_wait_model, disruption_finding, map_data)
 weekly_refresh = dg.define_asset_job(
-    "weekly_refresh", selection=dg.AssetSelection.all() - models,
-    description="Download new history, rebuild the warehouse, rerun the finding, map and extracts.")
+    "weekly_refresh", selection=dg.AssetSelection.all() - published,
+    description="Download new history, rebuild the warehouse, refresh the Tableau extracts.")
 daily_live = dg.define_asset_job(
     "daily_live", selection=dg.AssetSelection.assets(warehouse_staging, warehouse_dbt, warehouse, tableau_extracts),
     description="Rebuild the warehouse with the latest live snapshots and refresh the Tableau extracts.")

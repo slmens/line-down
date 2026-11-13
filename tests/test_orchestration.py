@@ -42,18 +42,17 @@ class ExtractTest(unittest.TestCase):
 
 @unittest.skipIf(dagster is None, "dagster not installed (use .venv/bin/python)")
 class DagsterDefinitionsTest(unittest.TestCase):
-    def test_jobs_cover_the_pipeline_but_never_the_spent_models(self):
+    def test_jobs_cover_the_pipeline_but_never_rewrite_published_results(self):
         sys.path.insert(0, str(ROOT / "orchestration"))
         import definitions as d
         keys = lambda job: {k.to_user_string() for k in d.defs.resolve_job_def(job).asset_layer.selected_asset_keys}  # noqa: E731
         weekly, daily = keys("weekly_refresh"), keys("daily_live")
-        for k in ("raw_history", "staging/stg_trips", "trips", "subway_delays", "warehouse", "disruption_finding",
-                  "map_data", "tableau_extracts"):
+        for k in ("raw_history", "staging/stg_trips", "trips", "subway_delays", "warehouse", "tableau_extracts"):
             self.assertIn(k, weekly)
         self.assertNotIn("raw_history", daily)
         self.assertIn("mart_dock_levels_hourly", daily)
         for job in (weekly, daily):
-            self.assertFalse({"delay_length_model", "walk_or_wait_model"} & job)
+            self.assertFalse({"delay_length_model", "walk_or_wait_model", "disruption_finding", "map_data"} & job)
 
 
 if __name__ == "__main__":
